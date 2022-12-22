@@ -41,9 +41,9 @@ void importInformation(ifstream& file, IMAGE_NT_HEADERS ntHeaders)
     IMAGE_DATA_DIRECTORY importDirectory = ntHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
     IMAGE_IMPORT_DESCRIPTOR importDescriptor;
 
-    if (importDirectory.VirtualAddress == 0)
+    if (importDescriptor.Name == 0)
     {
-        cout << "The file does not have an import directory." << endl;
+        cout << "The file does not have any imports." << endl;
         return;
     }
 
