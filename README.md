@@ -4,6 +4,7 @@
  - [PE file](#pe-file)
     - [Introduction](#introduction)
     - [DOS Header](#dos-header)
+    - [CPP script](/script/pe.cpp)
 
 ## PE File
 
