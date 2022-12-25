@@ -4,21 +4,21 @@
 using namespace std;
 
 // Converts an RVA to a VA
-  LPVOID RvaToVa(LPVOID lpBase, DWORD dwRva) {
-    PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)lpBase;
-    PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)((BYTE*)lpBase + pDosHeader->e_lfanew);
-    PIMAGE_SECTION_HEADER pSectionHeader = IMAGE_FIRST_SECTION(pNtHeaders);
+LPVOID RvaToVa(LPVOID lpBase, DWORD dwRva) {
+  PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)lpBase;
+  PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)((BYTE*)lpBase + pDosHeader->e_lfanew);
+  PIMAGE_SECTION_HEADER pSectionHeader = IMAGE_FIRST_SECTION(pNtHeaders);
 
-    for (unsigned int i = 0; i < pNtHeaders->FileHeader.NumberOfSections; i++, pSectionHeader++) {
-      DWORD dwSectionStartRva = pSectionHeader->VirtualAddress;
-      DWORD dwSectionEndRva = dwSectionStartRva + max(pSectionHeader->SizeOfRawData, pSectionHeader->Misc.VirtualSize);
-      if (dwRva >= dwSectionStartRva && dwRva < dwSectionEndRva) {
-        DWORD dwDelta = pSectionHeader->VirtualAddress - pSectionHeader->PointerToRawData;
-        return (LPVOID)((BYTE*)lpBase + dwRva - dwDelta);
-        }
-    }
-    return NULL;
+  for (unsigned int i = 0; i < pNtHeaders->FileHeader.NumberOfSections; i++, pSectionHeader++) {
+    DWORD dwSectionStartRva = pSectionHeader->VirtualAddress;
+    DWORD dwSectionEndRva = dwSectionStartRva + max(pSectionHeader->SizeOfRawData, pSectionHeader->Misc.VirtualSize);
+    if (dwRva >= dwSectionStartRva && dwRva < dwSectionEndRva) {
+      DWORD dwDelta = pSectionHeader->VirtualAddress - pSectionHeader->PointerToRawData;
+      return (LPVOID)((BYTE*)lpBase + dwRva - dwDelta);
+      }
   }
+  return NULL;
+}
 
 int main(int argc, char* argv[]) {
   if (argc != 2) {
