@@ -3,6 +3,23 @@
 
 using namespace std;
 
+// Converts an RVA to a VA
+  LPVOID RvaToVa(LPVOID lpBase, DWORD dwRva) {
+    PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)lpBase;
+    PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)((BYTE*)lpBase + pDosHeader->e_lfanew);
+    PIMAGE_SECTION_HEADER pSectionHeader = IMAGE_FIRST_SECTION(pNtHeaders);
+
+    for (unsigned int i = 0; i < pNtHeaders->FileHeader.NumberOfSections; i++, pSectionHeader++) {
+      DWORD dwSectionStartRva = pSectionHeader->VirtualAddress;
+      DWORD dwSectionEndRva = dwSectionStartRva + max(pSectionHeader->SizeOfRawData, pSectionHeader->Misc.VirtualSize);
+      if (dwRva >= dwSectionStartRva && dwRva < dwSectionEndRva) {
+        DWORD dwDelta = pSectionHeader->VirtualAddress - pSectionHeader->PointerToRawData;
+        return (LPVOID)((BYTE*)lpBase + dwRva - dwDelta);
+        }
+    }
+    return NULL;
+  }
+
 int main(int argc, char* argv[]) {
   if (argc != 2) {
     cerr << "Usage: " << argv[0] << " <path-of-PE-file>" << endl;
@@ -80,24 +97,43 @@ int main(int argc, char* argv[]) {
   }
 
   cout << endl << "== Information of imports ==" << endl;
-  // Get the import table (not woking)
-  PIMAGE_DATA_DIRECTORY pImportTable = &pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-  PIMAGE_IMPORT_DESCRIPTOR pImportDesc = (PIMAGE_IMPORT_DESCRIPTOR)((BYTE*)lpBase + pImportTable->VirtualAddress);
-  for (; pImportDesc->Name != 0; pImportDesc++) {
-    cout << "DLL name: " << (char*)((BYTE*)lpBase + pImportDesc->Name) << endl;
-    // Get the import address table
-    PIMAGE_THUNK_DATA pThunk = (PIMAGE_THUNK_DATA)((BYTE*)lpBase + pImportDesc->FirstThunk);
-    // Get the import name table
-    PIMAGE_THUNK_DATA pName = (PIMAGE_THUNK_DATA)((BYTE*)lpBase + pImportDesc->OriginalFirstThunk);
-    for (; pThunk->u1.Function != 0; pThunk++, pName++) {
-      if (IMAGE_SNAP_BY_ORDINAL(pName->u1.Ordinal)) {
-        cout << " Ordinal: " << IMAGE_ORDINAL(pName->u1.Ordinal) << endl;
+   // Get the address of the import directory table
+  PIMAGE_DATA_DIRECTORY pImportDirectory = &pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+  PIMAGE_IMPORT_DESCRIPTOR pImportDescriptor = (PIMAGE_IMPORT_DESCRIPTOR)RvaToVa(lpBase, pImportDirectory->VirtualAddress);
+
+  // Iterate through the import directory table
+  while (pImportDescriptor->Name != 0) {
+    // Get the name of the imported module
+    PSTR pszModuleName = (PSTR)RvaToVa(lpBase, pImportDescriptor->Name);
+
+    cout << "Imported module: " << pszModuleName << endl;
+
+    // Get the ILT and INT for this module
+    PIMAGE_THUNK_DATA pImportLookupTable = (PIMAGE_THUNK_DATA)RvaToVa(lpBase, pImportDescriptor->OriginalFirstThunk);
+    PIMAGE_THUNK_DATA pImportNameTable = (PIMAGE_THUNK_DATA)RvaToVa(lpBase, pImportDescriptor->FirstThunk);
+
+    // Iterate through the ILT and INT
+    while (pImportLookupTable->u1.AddressOfData != 0) {
+      // Check if the entry in the ILT is an RVA or an ordinal
+      if (pImportLookupTable->u1.Ordinal & IMAGE_ORDINAL_FLAG) {
+        // Entry is an ordinal
+        WORD wOrdinal = IMAGE_ORDINAL(pImportLookupTable->u1.Ordinal);
+        cout << "  Imported function (ordinal): " << dec << wOrdinal << endl;
       } else {
-        PIMAGE_IMPORT_BY_NAME pImportName = (PIMAGE_IMPORT_BY_NAME)((BYTE*)lpBase + pName->u1.AddressOfData);
-        cout << " Function name: " << pImportName->Name << endl;
+        // Entry is an RVA
+        PIMAGE_IMPORT_BY_NAME pImportByName = (PIMAGE_IMPORT_BY_NAME)RvaToVa(lpBase, pImportLookupTable->u1.AddressOfData);
+        cout << "  Imported function (name): " << pImportByName->Name << endl;
       }
+
+      // Move to the next entry in the ILT and INT
+      pImportLookupTable++;
+      pImportNameTable++;
     }
+
+    // Move to the next imported module
+    pImportDescriptor++;
   }
+
   // Unmap the PE file
   UnmapViewOfFile(lpBase);
   CloseHandle(hMapping);

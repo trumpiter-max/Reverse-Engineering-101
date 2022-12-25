@@ -5,7 +5,8 @@
     - [Introduction](#introduction)
     - [DOS Header](#dos-header)
     - [CPP script](/script/pe.cpp)
-
+ - [MessageBox](#messagebox)
+    - [CPP script](/script/messagebox.cpp)
 ## PE File
 
 This type of file using for Win32, used on Win32 for almost purpose 
@@ -60,6 +61,13 @@ Some definitions:
 ### DOS Header
 
 Accounting for first 64 bytes of file
+
+### MessageBox
+
+Program (C/C++) to insert into any exe file a MessageBox "You've got infected". After showing that MessageBox, the program continues to run normally.
+
+For example: There is a file notepad.exe. You write a program to insert a code into that file so that when running the notepad.exe file, it will turn on the MessageBox, after pressing the Ok button on that MessageBox, the notepad file continues to run as it was.
+
 
 
 
