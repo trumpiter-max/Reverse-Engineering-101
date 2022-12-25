@@ -105,7 +105,7 @@ int main(int argc, char* argv[]) {
   while (pImportDescriptor->Name != 0) {
     // Get the name of the imported module
     PSTR pszModuleName = (PSTR)RvaToVa(lpBase, pImportDescriptor->Name);
-
+    cout << "----------------------------------------" << endl << endl;
     cout << "Imported module: " << pszModuleName << endl;
 
     // Get the ILT and INT for this module
