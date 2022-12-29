@@ -129,6 +129,7 @@ Program (C/C++) to insert into any EXE file a MessageBox "You've got infected". 
 
 You write a program to insert a code into EXE file so that when running the modified EXE file, it will turn on the MessageBox, after pressing the Ok button on that MessageBox, the file continues to run as it was.
 
+First step, we need to add a new section named `.inflect` 
 
 
 
