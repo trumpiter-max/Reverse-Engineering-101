@@ -7,7 +7,7 @@
     - [PE header](#the-pe-header)
     - [Sections table](#sections-table)
     - [CPP script](#pe-script)
- - [MessageBox](#messagebox)
+ - [Message Box](#message-box)
     - [CPP script](/script/messagebox.cpp)
 ## PE File
 
@@ -62,7 +62,7 @@ Some definitions:
 
 ### DOS Header
 
-Accounting for `first 64 bytes` of file, defined in `window.inc` or `winnt.h`. In PE file, magic of DOS header includes value: `4Dh, 5Ah (2 bytes first)`. `Ifanview` which at the end of DOS header and beginning of DOS stub, is DWORD and includes offset of PE header
+Accounting for `first 64 bytes` of file, defined in `window.inc` or `winnt.h`. In PE file, magic of DOS header includes value: `4Dh, 5Ah (2 bytes first)`. `Ifanview` which at the end of DOS header and beginning of DOS stub, is `DWORD` and includes offset of PE header
 
 ---
 
@@ -123,13 +123,25 @@ It will display all information of PE file:
 
 ---
 
-### MessageBox
+### Message Box
 
-Program (C/C++) to insert into any EXE file a MessageBox "You've got infected". After showing that MessageBox, the program continues to run normally.
+Program (C/C++) to insert into any EXE file a Message Box "You've got infected". After showing that Message Box, the program continues to run normally.
 
-You write a program to insert a code into EXE file so that when running the modified EXE file, it will turn on the MessageBox, after pressing the Ok button on that MessageBox, the file continues to run as it was.
+You write a program to insert a code into EXE file so that when running the modified EXE file, it will turn on the Message Box, after pressing the Ok button on that Message Box, the file continues to run as it was.
 
-First step, we need to add a new section named `.inflect` 
+To do work:
+
+1. Open file to read and write
+2. Extract PE file information
+3. Find a suitably-sized code cave (create a new section `.inflect`)
+4. Tailor `shellcode` to the target application
+5. Acquire any additional data for the `shellcode` to function
+6. Inject the `shellcode` into the application
+7. Modify the application's original entry point to the start of the `shellc`
+
+
+
+
 
 
 
