@@ -1,5 +1,7 @@
 # Reverse Engineering 101
 
+*Note: some scripts in this file being built with Visual Studio (need C++ 17 or higher). Otherwise, compiling with others like GCC (from [MinGW](https://sourceforge.net/projects/mingw/) or others) is possible*
+
 ## Table of content
  - [PE file](#pe-file)
     - [Introduction](#introduction)
@@ -8,7 +10,10 @@
     - [Sections table](#sections-table)
     - [CPP script](#pe-script)
  - [Message Box](#message-box)
-    - [CPP script](/script/messagebox.cpp)
+    - [CPP script](#message-box-script)
+
+---
+
 ## PE File
 
 This type of file using for Win32, used on Win32 for almost purpose 
@@ -95,11 +100,13 @@ Get it from `IMAGE_SECTION_HEADER`
 
 ### PE script
 
-Using this [simple CPP program](/script/pe.cpp) get information from PE file.
+Using this [simple CPP program](/script/pe.cpp) to get information from PE file
+
+Using command line: `gcc pe.cpp -o pe.exe` to build EXE file with GCC
 
 Using this program with PowerShell or cmd: `.\pe.exe <path/of/file>`, then result will be similar like this:
 
-*Note: this script only read data of x64 PE file*
+*Note: this script only read data of PE32+ file*
 
 ![Result 1](https://i.ibb.co/Nn3Ld8H/Screenshot-2022-12-26-201219.png)
 
@@ -125,7 +132,7 @@ It will display all information of PE file:
 
 ### Message Box
 
-Program (C/C++) to insert into any EXE file a Message Box "You've got infected". After showing that Message Box, the program continues to run normally.
+Program (C/C++) to insert into any EXE file a Message Box **"You've got infected"**. After showing that Message Box, the program continues to run normally.
 
 You write a program to insert a code into EXE file so that when running the modified EXE file, it will turn on the Message Box, after pressing the Ok button on that Message Box, the file continues to run as it was.
 
@@ -134,13 +141,20 @@ To do work:
 1. Open file to read and write
 2. Extract PE file information
 3. Find a suitably-sized code cave (create a new section `.inflect`)
-4. Tailor `shellcode` to the target application
+4. Tailor `shellcode` to the target application, using Metasploit framework
 5. Acquire any additional data for the `shellcode` to function
 6. Inject the `shellcode` into the application
-7. Modify the application's original entry point to the start of the `shellc`
+7. Modify the application's original entry point to the start
 
+### Message Box Script
 
+Using this [simple CPP program](/script/messagebox.cpp) to infect Message Box into EXE file
 
+Using command line `gcc messagebox.cpp -m32 -std=c++17 -lstdc++fs -o messagebox.exe` to build EXE
+
+Using this program with PowerShell or cmd: `.\messagebox.exe <path/of/directory>`, then all EXE file in target directory will be modified with Message Box. Opening modified application to see result as description
+
+*Note: this script only read data of PE32 file*
 
 
 
