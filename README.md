@@ -2,19 +2,26 @@
 
 *Note: some scripts in this file being built with Visual Studio (need C++ 17 or higher). Otherwise, compiling with others like GCC (from [MinGW](https://sourceforge.net/projects/mingw/) or others) is possible*
 
-## Table of content
- - [PE file](#pe-file)
-    - [Introduction](#introduction)
-    - [DOS Header](#dos-header)
-    - [PE header](#the-pe-header)
-    - [Sections table](#sections-table)
-    - [CPP script](#pe-script)
- - [Message Box](#message-box)
-    - [CPP script](#message-box-script)
+---
+
+# Table of content
+   - [PE file](#pe-file)
+      - [Introduction](#introduction)
+      - [DOS Header](#dos-header)
+      - [PE header](#the-pe-header)
+      - [Sections table](#sections-table)
+      - [Import Directory Table](#import-directory-table)
+      - [CPP script](#pe-script)
+   - [Message Box](#message-box)
+      - [CPP script](#message-box-script)
+   - [Malware analysis](#malware-analysis)
+      - [Setup environment](#setup-environment)
+      - [Static analysis](#static-analysis)
+      - [Dynamic-analysis](#dynamic-analysis)
 
 ---
 
-## PE File
+# PE File
 
 This type of file using for Win32, used on Win32 for almost purpose 
 
@@ -22,9 +29,11 @@ Why we need to know PE file?
  - Injecting code into executable file
  - Manual unpacking product file (being packed)
 
+Get detail with a document [here](/document/PE_tutorial.pdf)
+
 ---
 
-### Introduction
+## Introduction
 
 **Basic structure of PE file:**
 ```
@@ -65,13 +74,13 @@ Some definitions:
 
 ---
 
-### DOS Header
+## DOS Header
 
 Accounting for `first 64 bytes` of file, defined in `window.inc` or `winnt.h`. In PE file, magic of DOS header includes value: `4Dh, 5Ah (2 bytes first)`. `Ifanview` which at the end of DOS header and beginning of DOS stub, is `DWORD` and includes offset of PE header
 
 ---
 
-### The PE header
+## The PE header
 
 Getting header from `IMAGE_NT_HEADERS` including 3 part (defined in `windows.inc`):
  - `Signature`: value is often `50h`, `45h`, `00h`
@@ -92,13 +101,35 @@ Getting header from `IMAGE_NT_HEADERS` including 3 part (defined in `windows.inc
 
 ---
 
-### Sections table
+## Sections table
 
-Get it from `IMAGE_SECTION_HEADER`
+Get it from `IMAGE_SECTION_HEADER` which are containers of the actual data:
+
+   - `.text`: Contains the executable code of the program.
+   - `.data`: Contains the initialized data.
+   - `.bss`: Contains uninitialized data.
+   - `.rdata`: Contains read-only initialized data.
+   - `.edata`: Contains the export tables.
+   - `.idata`: Contains the import tables.
+   - `.reloc`: Contains image relocation information.
+   - `.rsrc`: Contains resources used by the program, these include images, icons or even embedded binaries.
+   - `.tls`: (Thread Local Storage), provides storage for every executing thread of the program.
 
 ---
 
-### PE script
+## Import Directory Table
+
+Located at the beginning of the `.idata` section, get it from `IMAGE_IMPORT_DESCRIPTOR`:
+
+   - OriginalFirstThunk: RVA of the ILT
+   - TimeDateStamp: A time date stamp, that’s initially set to 0 if not bound and set to 0-1 if bound
+   - ForwarderChain: The index of the first forwarder chain reference
+   - Name: An RVA of an ASCII string that contains the name of the imported DLL
+   - FirstThunk: RVA of the IAT
+
+---
+
+## PE script
 
 Using this [simple CPP program](/script/pe.cpp) to get information from PE file
 
@@ -130,7 +161,7 @@ It will display all information of PE file:
 
 ---
 
-### Message Box
+# Message Box
 
 Program (C/C++) to insert into any EXE file a Message Box **"You've got infected"**. After showing that Message Box, the program continues to run normally.
 
@@ -146,15 +177,49 @@ To do work:
 6. Inject the `shellcode` into the application
 7. Modify the application's original entry point to the start
 
-### Message Box Script
+---
+
+## Message Box Script
 
 Using this [simple CPP program](/script/messagebox.cpp) to infect Message Box into EXE file
 
 Using command line `gcc messagebox.cpp -m32 -std=c++17 -lstdc++fs -o messagebox.exe` to build EXE
 
+**Warning: after compiler built executable file, window defender will detect it is a Trojan, so you just allow it to run**
+
 Using this program with PowerShell or cmd: `.\messagebox.exe <path/of/directory>`, then all EXE file in target directory will be modified with Message Box. Opening modified application to see result as description
 
 *Note: this script only read data of PE32 file*
+
+---
+
+# Malware analysis
+
+Analysis a sample and source code of `LockBit` ransomware on the internet and try to analyze it behaviors both static and dynamic way
+
+Get detail with a document [here](/document/Practical_malware_analysis.pdf)
+
+---
+
+## Setup environment
+
+We need a sandbox environment using virtual machine to make sure hosting machine will be not affected by malware. Just download any window virtual machine from [here](https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/) or [ISO file](https://www.microsoft.com/en-us/software-download/windows10). In this case, window 10 is selected to main OS virtual machine. 
+
+---
+
+## Static analysis 
+
+Technique using for static analysis:
+   - Antivirus tools to confirm maliciousness
+   - Hashes to identify malware
+   - Gleaning information from a file’s strings, functions, and headers
+
+---
+
+## Dynamic analysis
+
+
+
 
 
 
