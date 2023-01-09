@@ -203,20 +203,66 @@ Get detail with a document [here](/document/Practical_malware_analysis.pdf)
 
 ## Setup environment
 
-We need a sandbox environment using virtual machine to make sure hosting machine will be not affected by malware. Just download any window virtual machine from [here](https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/) or [ISO file](https://www.microsoft.com/en-us/software-download/windows10). In this case, window 10 is selected to main OS virtual machine. 
+We need a sandbox environment using virtual machine to make sure hosting machine will be not affected by malware. Just download any window virtual machine from [here](https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/) or [ISO file](https://www.microsoft.com/en-us/software-download/windows10). In this case, window 10 is selected to main OS virtual machine. Using `Host-only` virtual network card.
+
+Using [VMware](https://www.vmware.com/products/workstation-pro/workstation-pro-evaluation.html) (recommended) or [Virtual Box](https://www.virtualbox.org/wiki/Downloads). Configure virtual machine before analyzing malware, choose custom network card to make virtual network, often take snapshot for machine when get sample of malware
+
+*Note: should avoid performing malware analysis on any critical or sensitive machine and keep virtual machine software up-to-dated*
 
 ---
 
 ## Static analysis 
 
+Describe the process of analyzing the code or structure of a program to determine its 
+function
+
 Technique using for static analysis:
-   - Antivirus tools to confirm maliciousness
-   - Hashes to identify malware
-   - Gleaning information from a file’s strings, functions, and headers
+   - `Antivirus tools` to confirm maliciousness
+      - Known suspicious code (`file signatures`) 
+      - Pattern-matching analysis (`heuristics`) 
+   - `Hashes` to identify malware
+      - Commonly used is `MD5` or `SHA-1`
+      - Using hash as label, share to other to help them to identify malware
+   - `Gleaning information` from a `file’s strings, functions, and headers`
+      - `Finding Strings`: get hints from ASCII or Unicode format string of program
+      - `Packed and Obfuscated Malware`: this technique hide information of malware
+         - `Packing file`: using `PEiD program` to detect type of packer then unpack 
+      - `Portable Executable File Format`: PE files begin with a header that includes information about the code, 
+the type of application, required library functions, and space requirements.
+      -` Linked Libraries` and `Functions`: 
+         - `Imports` are functions used 
+by one program that are actually stored in a different program
+         - `Static, Runtime, and Dynamic Linking`: 
+            - `Static linking`: used in UNIX and Linux programs that all code from that library is copied into the executable 
+            - `Runtime linking`: Executables that use 
+runtime linking connect to libraries only when that function is needed
+            - Two most commonly used are `LoadLibrary` and `GetProcAddress`. `LdrGetProcAddress` and 
+`LdrLoadDll` are also used.
+            - `Dynamic linking`: host OS searches for the necessary libraries when the program is loaded. Using `Dependency Walker` to export `Dynamic linking`
 
 ---
 
 ## Dynamic analysis
+
+`Running Malware`: focus on running the majority of malware, encounter (EXEs and DLLs). Using `rundll32.exe` to provide a cointainer for running a DLL. Malicious DLLs frequently run most of their code in DLLMain (called from the DLL entry point)
+
+`Monitoring` with `Process Monitor` or `procmon`: monitor certain registry, file system, network, process, and thread activity
+
+`Viewing Processes` with `Process Explorer`: provide valuable insight into the processes currently running on a system
+
+Using `Dependency Walker`: determine whether a DLL is loaded into a process after load time, compare the DLL list in Process Explorer to the imports shown in `Dependency Walker`
+
+`Analyzing Malicious Documents`: using `Process Explorer` to analyze malicious documents, such as 
+PDFs and Word documents.
+
+Comparing `Registry Snapshots` with `Regshot` to get hint 
+
+Faking a Network: Malware often beacons out and eventually communicates with a command-and-control server so prevent malware from realizing virtual environment using `ApateDNS` or `FakeNet` then monitor with `netcat`
+
+Packet `Sniffing` with `Wireshark`: intercepts and 
+logs network traffic
+
+Using `INetSim`: simulating common Internet services
 
 
 
