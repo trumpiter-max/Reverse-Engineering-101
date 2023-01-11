@@ -18,6 +18,9 @@
       - [Setup environment](#setup-environment)
       - [Static analysis](#static-analysis)
       - [Dynamic-analysis](#dynamic-analysis)
+      - [Malware description](#malware-description)
+         - [Static result](#static)
+         - [Dynamic result](#dynamic)
 
 ---
 
@@ -189,7 +192,7 @@ Using command line `gcc messagebox.cpp -m32 -std=c++17 -lstdc++fs -o messagebox.
 
 Using this program with PowerShell or cmd: `.\messagebox.exe <path/of/directory>`, then all EXE file in target directory will be modified with Message Box. Opening modified application to see result as description
 
-*Note: this script only read data of PE32 file*
+*Note: this script only read data of PE32 file only*
 
 ---
 
@@ -203,7 +206,7 @@ Get detail with a document [here](/document/Practical_malware_analysis.pdf)
 
 ## Setup environment
 
-We need a sandbox environment using virtual machine to make sure hosting machine will be not affected by malware. Just download any window virtual machine from [here](https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/) or [ISO file](https://www.microsoft.com/en-us/software-download/windows10). In this case, window 10 is selected to main OS virtual machine. Using `Host-only` virtual network card.
+We need a sandbox environment using virtual machine to make sure hosting machine will be not affected by malware. Just download any window virtual machine from [here](https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/) or [ISO file](https://www.microsoft.com/en-us/software-download/windows10). In this case, [`FlareVM`](https://github.com/mandiant/flare-vm) (Window Based Reverse Engineering and Malware Analysis Platform) is selected to main OS virtual machine. Using `Host-only` virtual network card to prevent threat of malware.
 
 Using [VMware](https://www.vmware.com/products/workstation-pro/workstation-pro-evaluation.html) (recommended) or [Virtual Box](https://www.virtualbox.org/wiki/Downloads). Configure virtual machine before analyzing malware, choose custom network card to make virtual network, often take snapshot for machine when get sample of malware
 
@@ -263,6 +266,95 @@ Packet `Sniffing` with `Wireshark`: intercepts and
 logs network traffic
 
 Using `INetSim`: simulating common Internet services
+
+---
+
+## Malware description
+
+---
+
+### Static
+
+The sample in this case is `LockBit 3.0` ransomware - designed to block user access to computer systems in exchange for a ransom payment in 2019 and first-ever sample publication in 2022. 
+
+Get sample for this case at [here](https://github.com/whichbuffer/Lockbit-Black-3.0). Make sure safety environment is ready, then download it and unzip
+
+Using DIE (Detect it easy) to find file type of malware 
+
+![PE type](https://i.ibb.co/ZLvHh9Q/Screenshot-20230109-095845.png)
+
+![File status](https://i.ibb.co/NnNCTPS/Screenshot-20230110-102021.png)
+
+![Import table](https://i.ibb.co/znphXHN/Screenshot-20230110-101717.png)
+
+It is a `packed PE32` file using `Microsoft Linker (14.12)[GUI32]` and its import table includes: 
+   - `gdi32.dll`: contain functions for displaying and manipulating graphics
+      - TextOutW
+      - SetTextColor
+      - SetPixel
+      - SelectObject
+      - GetTextMetricsW
+   - `USER32.dll`: contain user-interface components
+      - EndDialog
+      - GetDigItem
+      - GetDigItemTextW
+      - GetKeyNameTextW
+      - GetMessageW
+      - LoadMenuW
+      - DialogBoxParamW
+      - CreateWindowExW
+      - CreateDialogParamW
+      - GetClassNameW
+   - `KERNEL32.dll`: contain core functionality
+      - GetDateFormatW
+      - LoadLibraryExA
+      - GetTickCount
+      - GetProcAddress
+      - GetModuleHandleW
+      - GetLocateInfoW
+      - GetCommandLineA
+      - FormatMessageW
+      - GetLastError 
+   
+Moreover, in string of file, it has string `!This program cannot be run in DOS mode` - meaning that current running Windows NASM on an MS-DOS (virtual) platform
+
+Continue to use `HashCalc` to hash file:
+
+![Hash result](https://i.ibb.co/M2Mt0cT/Screenshot-20230110-104250.png)
+
+This file has:
+   - `MD5` hash: 38745539b71cf201bb502437f891d799
+   - `SHA1` hash: f2a72bee623659d3ba16b365024020868246d901 
+
+Then go to website [`VirusTotal`](https://www.virustotal.com/) at host machine, find with hash, or see the result at [here](https://www.virustotal.com/gui/file/80e8defa5377018b093b5b90de0f2957f7062144c83a09a56bba1fe4eda932ce)
+
+![AV result](https://i.ibb.co/vqTMRvg/Screenshot-20230110-105049.png)
+
+---
+
+### Dynamic
+
+Before first run, capture state with `RegShot`: compare state of registry before and after
+
+Following PDF file following in same folder. Using flag `-pass` when running file to decrypt the source code of `LockBit` and execute it on victim:
+
+```
+   <Ransomware.exe> -k LocalServiceNetworkRestricted -pass db66023ab2abcb9957fb01ed50cdfa6a
+```   
+
+![First run](https://i.ibb.co/TY7Jqfk/Screenshot-20230110-082437.png)
+
+After running malware, it encrypts some files into `<random>.HLJkNskOq` and create multiple note `HLJkNskOq.README.txt`, see content [here](/malware_analysis_note/malware_note.txt) and wallpaper is changed 
+
+![Wallpaper](https://i.ibb.co/GFD5kwP/Screenshot-20230110-090349.png)
+
+Overall, this malware will disable registry of Window Security to prevent its detection and a lot of registries are modifies. 
+
+Check the status of Window Security with command line: `sc query WinDefend` in cmd
+
+![Window defend status](https://i.ibb.co/4fNn1RK/Screenshot-20230110-085602.png)
+
+
 
 
 
