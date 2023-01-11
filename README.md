@@ -286,8 +286,7 @@ Using DIE (Detect it easy) to find file type of malware
 ![File status](https://i.ibb.co/NnNCTPS/Screenshot-20230110-102021.png)
 
 ![Import table](https://i.ibb.co/znphXHN/Screenshot-20230110-101717.png)
-
-It is a `packed PE32` file using `Microsoft Linker (14.12)[GUI32]` and its import table includes: 
+It is a `PE32` file using `Microsoft Linker (14.12)[GUI32]` and its import table includes: 
    - `gdi32.dll`: contain functions for displaying and manipulating graphics
       - TextOutW
       - SetTextColor
@@ -302,7 +301,7 @@ It is a `packed PE32` file using `Microsoft Linker (14.12)[GUI32]` and its impor
       - GetMessageW
       - LoadMenuW
       - DialogBoxParamW
-      - CreateWindowExW
+      - CreateWindowExW 
       - CreateDialogParamW
       - GetClassNameW
    - `KERNEL32.dll`: contain core functionality
@@ -330,6 +329,8 @@ Then go to website [`VirusTotal`](https://www.virustotal.com/) at host machine, 
 
 ![AV result](https://i.ibb.co/vqTMRvg/Screenshot-20230110-105049.png)
 
+Looking inside this malware with IDA
+
 ---
 
 ### Dynamic
@@ -353,6 +354,10 @@ Overall, this malware will disable registry of Window Security to prevent its de
 Check the status of Window Security with command line: `sc query WinDefend` in cmd
 
 ![Window defend status](https://i.ibb.co/4fNn1RK/Screenshot-20230110-085602.png)
+
+Check result in `ProcMan`:
+
+![](https://i.ibb.co/xsMNhH2/Screenshot-20230111-094745.png)
 
 
 
