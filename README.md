@@ -322,14 +322,66 @@ Continue to use `HashCalc` to hash file:
 ![Hash result](https://i.ibb.co/M2Mt0cT/Screenshot-20230110-104250.png)
 
 This file has:
-   - `MD5` hash: 38745539b71cf201bb502437f891d799
-   - `SHA1` hash: f2a72bee623659d3ba16b365024020868246d901 
+   - `MD5` hash: `38745539b71cf201bb502437f891d799`
+   - `SHA1` hash: `f2a72bee623659d3ba16b365024020868246d901` 
 
 Then go to website [`VirusTotal`](https://www.virustotal.com/) at host machine, find with hash, or see the result at [here](https://www.virustotal.com/gui/file/80e8defa5377018b093b5b90de0f2957f7062144c83a09a56bba1fe4eda932ce)
 
 ![AV result](https://i.ibb.co/vqTMRvg/Screenshot-20230110-105049.png)
 
-Looking inside this malware with IDA
+We can see some useful details:
+
+![Contact IP](https://i.ibb.co/yy4f5hC/Screenshot-20230111-112031.png)
+
+![IP Graph](https://i.ibb.co/v3BKX64/Screenshot-20230111-111910.png)
+
+Furthermore, get source code of `LockBit Black` at [here](https://web.archive.org/web/20220922061814if_/https://raw.githubusercontent.com/3xp0rt/LockBit-Black-Builder/main/LockBit3Builder.7z) and password for unzip is: `!1C!Vk~1i!LW3LR|wgXHC`, md5 hash of file: `7db3797ee09aedc1c6ec1389ab199493`. After unzip file, we get below files:
+
+![Source file](https://i.ibb.co/w4VzkLf/Screenshot-20230111-105046.png)
+
+*Note: this repo storing this source are disabled, only use for educational purpose*
+
+Lock at `config.json` first, there are a lot of actions when malware run:
+
+```json
+   "config": {
+    "settings": {
+      "encrypt_mode": "auto",
+      "encrypt_filename": false,
+      "impersonation": true,
+      "skip_hidden_folders": false,
+      "language_check": false,
+      "local_disks": true,
+      "network_shares": true,
+      "kill_processes": true,
+      "kill_services": true,
+      "running_one": true,
+      "print_note": true,
+      "set_wallpaper": true,
+      "set_icons": true,
+      "send_report": false,
+      "self_destruct": true,
+      "kill_defender": true,
+      "wipe_freespace": false,
+      "psexec_netspread": false,
+      "gpo_netspread": true,
+      "gpo_ps_update": true,
+      "shutdown_system": false,
+      "delete_eventlogs": true,
+      "delete_gpo_delay": 1
+    },
+    "white_folders": "$recycle.bin;config.msi;$windows.~bt;$windows.~ws;windows;boot;program files;program files (x86);programdata;system volume information;tor browser;windows.old;intel;msocache;perflogs;x64dbg;public;all users;default;microsoft",
+    "white_files": "autorun.inf;boot.ini;bootfont.bin;bootsect.bak;desktop.ini;iconcache.db;ntldr;ntuser.dat;ntuser.dat.log;ntuser.ini;thumbs.db;GDIPFONTCACHEV1.DAT;d3d9caps.dat",
+    "white_extens": "386;adv;ani;bat;bin;cab;cmd;com;cpl;cur;deskthemepack;diagcab;diagcfg;diagpkg;dll;drv;exe;hlp;icl;icns;ico;ics;idx;ldf;lnk;mod;mpa;msc;msp;msstyles;msu;nls;nomedia;ocx;prf;ps1;rom;rtp;scr;shs;spl;sys;theme;themepack;wpx;lock;key;hta;msi;pdb;search-ms",
+    "white_hosts": "WS2019",
+    "kill_processes": "sql;oracle;ocssd;dbsnmp;synctime;agntsvc;isqlplussvc;xfssvccon;mydesktopservice;ocautoupds;encsvc;firefox;tbirdconfig;mydesktopqos;ocomm;dbeng50;sqbcoreservice;excel;infopath;msaccess;mspub;onenote;outlook;powerpnt;steam;thebat;thunderbird;visio;winword;wordpad;notepad;calc;wuauclt;onedrive",
+    "kill_services": "vss;sql;svc$;memtas;mepocs;msexchange;sophos;veeam;backup;GxVss;GxBlr;GxFWD;GxCVD;GxCIMgr",
+    "gate_urls": "https://test.white-datasheet.com/;http://test.white-datasheet.com/",
+    "impers_accounts": "ad.lab:Qwerty!;Administrator:123QWEqwe!@#;Admin2:P@ssw0rd;Administrator:P@ssw0rd;Administrator:Qwerty!;Administrator:123QWEqwe;Administrator:123QWEqweqwe",
+    ...
+   }
+}
+```
 
 ---
 
