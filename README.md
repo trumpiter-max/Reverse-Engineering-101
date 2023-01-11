@@ -271,15 +271,21 @@ Using `INetSim`: simulating common Internet services
 
 ## Malware description
 
----
-
-### Static
-
 The sample in this case is `LockBit 3.0` ransomware - designed to block user access to computer systems in exchange for a ransom payment in 2019 and first-ever sample publication in 2022. 
 
 Get sample for this case at [here](https://github.com/whichbuffer/Lockbit-Black-3.0). Make sure safety environment is ready, then download it and unzip
 
-Using DIE (Detect it easy) to find file type of malware 
+Furthermore, get source code of `LockBit Black` at [here](https://web.archive.org/web/20220922061814if_/https://raw.githubusercontent.com/3xp0rt/LockBit-Black-Builder/main/LockBit3Builder.7z) and password for unzip is: `!1C!Vk~1i!LW3LR|wgXHC`, md5 hash of file: `7db3797ee09aedc1c6ec1389ab199493`. After unzip file, we get below files:
+
+![Source file](https://i.ibb.co/w4VzkLf/Screenshot-20230111-105046.png)
+
+*Note: this repo storing this source are disabled, only use for educational purpose*
+
+---
+
+### Static
+
+Using `DIE (Detect it easy)` to find file type of malware 
 
 ![PE type](https://i.ibb.co/ZLvHh9Q/Screenshot-20230109-095845.png)
 
@@ -335,53 +341,7 @@ We can see some useful details:
 
 ![IP Graph](https://i.ibb.co/v3BKX64/Screenshot-20230111-111910.png)
 
-Furthermore, get source code of `LockBit Black` at [here](https://web.archive.org/web/20220922061814if_/https://raw.githubusercontent.com/3xp0rt/LockBit-Black-Builder/main/LockBit3Builder.7z) and password for unzip is: `!1C!Vk~1i!LW3LR|wgXHC`, md5 hash of file: `7db3797ee09aedc1c6ec1389ab199493`. After unzip file, we get below files:
-
-![Source file](https://i.ibb.co/w4VzkLf/Screenshot-20230111-105046.png)
-
-*Note: this repo storing this source are disabled, only use for educational purpose*
-
-Lock at `config.json` first, there are a lot of actions when malware run:
-
-```json
-   "config": {
-    "settings": {
-      "encrypt_mode": "auto",
-      "encrypt_filename": false,
-      "impersonation": true,
-      "skip_hidden_folders": false,
-      "language_check": false,
-      "local_disks": true,
-      "network_shares": true,
-      "kill_processes": true,
-      "kill_services": true,
-      "running_one": true,
-      "print_note": true,
-      "set_wallpaper": true,
-      "set_icons": true,
-      "send_report": false,
-      "self_destruct": true,
-      "kill_defender": true,
-      "wipe_freespace": false,
-      "psexec_netspread": false,
-      "gpo_netspread": true,
-      "gpo_ps_update": true,
-      "shutdown_system": false,
-      "delete_eventlogs": true,
-      "delete_gpo_delay": 1
-    },
-    "white_folders": "$recycle.bin;config.msi;$windows.~bt;$windows.~ws;windows;boot;program files;program files (x86);programdata;system volume information;tor browser;windows.old;intel;msocache;perflogs;x64dbg;public;all users;default;microsoft",
-    "white_files": "autorun.inf;boot.ini;bootfont.bin;bootsect.bak;desktop.ini;iconcache.db;ntldr;ntuser.dat;ntuser.dat.log;ntuser.ini;thumbs.db;GDIPFONTCACHEV1.DAT;d3d9caps.dat",
-    "white_extens": "386;adv;ani;bat;bin;cab;cmd;com;cpl;cur;deskthemepack;diagcab;diagcfg;diagpkg;dll;drv;exe;hlp;icl;icns;ico;ics;idx;ldf;lnk;mod;mpa;msc;msp;msstyles;msu;nls;nomedia;ocx;prf;ps1;rom;rtp;scr;shs;spl;sys;theme;themepack;wpx;lock;key;hta;msi;pdb;search-ms",
-    "white_hosts": "WS2019",
-    "kill_processes": "sql;oracle;ocssd;dbsnmp;synctime;agntsvc;isqlplussvc;xfssvccon;mydesktopservice;ocautoupds;encsvc;firefox;tbirdconfig;mydesktopqos;ocomm;dbeng50;sqbcoreservice;excel;infopath;msaccess;mspub;onenote;outlook;powerpnt;steam;thebat;thunderbird;visio;winword;wordpad;notepad;calc;wuauclt;onedrive",
-    "kill_services": "vss;sql;svc$;memtas;mepocs;msexchange;sophos;veeam;backup;GxVss;GxBlr;GxFWD;GxCVD;GxCIMgr",
-    "gate_urls": "https://test.white-datasheet.com/;http://test.white-datasheet.com/",
-    "impers_accounts": "ad.lab:Qwerty!;Administrator:123QWEqwe!@#;Admin2:P@ssw0rd;Administrator:P@ssw0rd;Administrator:Qwerty!;Administrator:123QWEqwe;Administrator:123QWEqweqwe",
-    ...
-   }
-}
-```
+Lock at [`config.json`](/malware_analysis_note/config.txt) and [`build.bat`](/malware_analysis_note/build.txt) first in source code, there are a lot of actions when malware run
 
 ---
 
@@ -401,13 +361,13 @@ After running malware, it encrypts some files into `<random>.HLJkNskOq` and crea
 
 ![Wallpaper](https://i.ibb.co/GFD5kwP/Screenshot-20230110-090349.png)
 
-Overall, this malware will disable registry of Window Security to prevent its detection and a lot of registries are modifies. 
+Overall, this malware will disable registry of Window Security to prevent its detection and a lot of registries are modifies, see more [here](/malware_analysis_note/regshot.rar). 
 
 Check the status of Window Security with command line: `sc query WinDefend` in cmd
 
 ![Window defend status](https://i.ibb.co/4fNn1RK/Screenshot-20230110-085602.png)
 
-Check result in `ProcMan`:
+Check result in `ProcMan`
 
 ![](https://i.ibb.co/xsMNhH2/Screenshot-20230111-094745.png)
 
