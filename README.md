@@ -20,6 +20,8 @@
       - [Dynamic-analysis](#dynamic-analysis)
       - [Malware description](#malware-description)
          - [Static result](#static)
+            - [General view](#general)
+            - [Build File](#build-file)
          - [Dynamic result](#dynamic)
 
 ---
@@ -258,12 +260,11 @@ Using `Dependency Walker`: determine whether a DLL is loaded into a process afte
 `Analyzing Malicious Documents`: using `Process Explorer` to analyze malicious documents, such as 
 PDFs and Word documents.
 
-Comparing `Registry Snapshots` with `Regshot` to get hint 
+Comparing `Registry Snapshots` with `Regshot` to get hint about alternative of window registry
 
 Faking a Network: Malware often beacons out and eventually communicates with a command-and-control server so prevent malware from realizing virtual environment using `ApateDNS` or `FakeNet` then monitor with `netcat`
 
-Packet `Sniffing` with `Wireshark`: intercepts and 
-logs network traffic
+`Packet Sniffing` with `Wireshark`: intercepts and logs network traffic
 
 Using `INetSim`: simulating common Internet services
 
@@ -271,19 +272,23 @@ Using `INetSim`: simulating common Internet services
 
 ## Malware description
 
-The sample in this case is `LockBit 3.0` ransomware - designed to block user access to computer systems in exchange for a ransom payment in 2019 and first-ever sample publication in 2022. 
+The sample in this case is `LockBit 3.0` ransomware - designed to block user access to computer systems in exchange for a ransom payment in 2019 and first-ever sample publication in 2022. Exploit Windows Defender to deploy Cobalt Strike, it tricks system to load malicious DLL (Dynamic-Link Library) - sideload method. 
+
+This use the encrypted `Salsa-20 algorithm`. During the encryption threads, memory containing the private key is protected with heavy use of `RtlEncryptMemory` and `RtlDecyptMemory`, which makes the private key available unencrypted in memory only for the time it is necessary.
 
 Get sample for this case at [here](https://github.com/whichbuffer/Lockbit-Black-3.0). Make sure safety environment is ready, then download it and unzip
 
-Furthermore, get source code of `LockBit Black` at [here](https://web.archive.org/web/20220922061814if_/https://raw.githubusercontent.com/3xp0rt/LockBit-Black-Builder/main/LockBit3Builder.7z) and password for unzip is: `!1C!Vk~1i!LW3LR|wgXHC`, md5 hash of file: `7db3797ee09aedc1c6ec1389ab199493`. After unzip file, we get below files:
+Furthermore, get build file of `LockBit Black` at [here](https://web.archive.org/web/20220922061814if_/https://raw.githubusercontent.com/3xp0rt/LockBit-Black-Builder/main/LockBit3Builder.7z) and password for unzip is: `!1C!Vk~1i!LW3LR|wgXHC`, md5 hash of file: `7db3797ee09aedc1c6ec1389ab199493`. After unzip file, we get below files:
 
-![Source file](https://i.ibb.co/w4VzkLf/Screenshot-20230111-105046.png)
+![Build file](https://i.ibb.co/w4VzkLf/Screenshot-20230111-105046.png)
 
 *Note: this repo storing this source are disabled, only use for educational purpose*
 
 ---
 
 ### Static
+
+#### General
 
 Using `DIE (Detect it easy)` to find file type of malware 
 
@@ -321,7 +326,7 @@ It is a `PE32` file using `Microsoft Linker (14.12)[GUI32]` and its import table
       - FormatMessageW
       - GetLastError 
    
-Moreover, in string of file, it has string `!This program cannot be run in DOS mode` - meaning that current running Windows NASM on an MS-DOS (virtual) platform
+Moreover, in string of file, it has string `!This program cannot be run in DOS mode` - meaning that current running `Windows NASM`on an MS-DOS (virtual) platform
 
 Continue to use `HashCalc` to hash file:
 
@@ -341,9 +346,41 @@ We can see some useful details:
 
 ![IP Graph](https://i.ibb.co/v3BKX64/Screenshot-20230111-111910.png)
 
+Find more details with [`any.run`](https://app.any.run/) at [here](https://app.any.run/tasks/aae15060-a25d-4846-bdae-4b2515129b2e/)
+
+### Build file
+
 Lock at [`config.json`](/malware_analysis_note/config.txt) and [`build.bat`](/malware_analysis_note/build.txt) first in source code, there are a lot of actions when malware run
 
-Look details at [here](https://app.any.run/tasks/aae15060-a25d-4846-bdae-4b2515129b2e/)
+Using `ResourceHacker` to look inside file `build.exe`, and description of each resource by its ID: 
+   - 100: decryption template file 
+   - 101: executable template file 
+   - 103: DLL template file 
+   - 106: DLL template file that enables reflective loading
+
+![Builder](https://i.ibb.co/wQwdgZD/Screenshot-20230113-020610.png)
+
+Try to run `build.bat` to generate files in build folder:
+   - `DECRYPTION_ID.txt`:used to uniquely identify a victim 
+   - `LB3.exe`: compiled ransomware, which doesn’t require a password 
+   - `LB3Decryptor.exe`: decryption for the ransomware
+   - `LB3_pass.exe`: same as LB3.exe which require password and instructions in `Password_exe.txt` 
+`LB3_RelectiveDLL_DLLMain.dll` 
+   - `LB3_Rundll32.dll`: DLL version of ransomware, not require password
+   - `LB3_Rundll32_pass.dll`: DLL version of ransomware, require password in `Password_dll.txt` 
+   - `Password_dll.txt`: contain password and instructions for using `LB3_Rundll32_pass.dll` 
+   - `Password_exe.txt`: contain password and instructions for using `LB3_pass.exe` 
+   - `priv.key`: private encryption key used to encrypt victim files 
+   - `pub.key`: public encryption key used generate various strings that tie this instance of the ransomware to a victim
+
+Fact of this malware: it uses `Anti-debugging trick` by loading/resolving a Windows DLL from its hash tables, which are based on ROT13 to conceal their internal functions calls. 
+
+Using the PEB (Process Environment Block) of the module to look for a specific binary data marker in the code `(0xABABABAB)` at the end of the heap
+
+Use `IDA` to look inside `builder.exe` to analyze how this ransomware work and extract that into readable code:
+   - 1
+   - 2
+   - 3 
 
 ---
 
