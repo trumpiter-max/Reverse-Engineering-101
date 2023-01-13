@@ -200,7 +200,7 @@ Using this program with PowerShell or cmd: `.\messagebox.exe <path/of/directory>
 
 Analysis a sample and source code of `LockBit` ransomware on the internet and try to analyze it behaviors both static and dynamic way
 
-Get detail with a document [here](/document/Practical_malware_analysis.pdf)
+Get details from document [here](/document/Practical_malware_analysis.pdf)
 
 ---
 
@@ -343,6 +343,8 @@ We can see some useful details:
 
 Lock at [`config.json`](/malware_analysis_note/config.txt) and [`build.bat`](/malware_analysis_note/build.txt) first in source code, there are a lot of actions when malware run
 
+Look details at [here](https://app.any.run/tasks/aae15060-a25d-4846-bdae-4b2515129b2e/)
+
 ---
 
 ### Dynamic
@@ -367,7 +369,7 @@ Check the status of Window Security with command line: `sc query WinDefend` in c
 
 ![Window defend status](https://i.ibb.co/4fNn1RK/Screenshot-20230110-085602.png)
 
-Check result in `ProcMan`
+Check results in `ProcessMonitor`
 
 ![](https://i.ibb.co/xsMNhH2/Screenshot-20230111-094745.png)
 
