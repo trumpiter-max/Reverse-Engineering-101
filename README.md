@@ -373,20 +373,18 @@ Try to run `build.bat` to generate files in build folder:
    - `priv.key`: private encryption key used to encrypt victim files 
    - `pub.key`: public encryption key used generate various strings that tie this instance of the ransomware to a victim
 
-Fact of this malware: it uses `Anti-debugging trick` by loading/resolving a Windows DLL from its hash tables, which are based on ROT13 to conceal their internal functions calls. 
-
-Using the PEB (Process Environment Block) of the module to look for a specific binary data marker in the code `(0xABABABAB)` at the end of the heap
-
-Use `IDA` to look inside `builder.exe` to analyze how this ransomware work and extract that into readable code:
-   - 1
-   - 2
-   - 3 
+Fact of this malware: it uses `Anti-debugging trick` by loading/resolving a Windows DLL from its hash tables, which are based on ROT13 to conceal their internal functions calls and hide the 
+function calls and `Windows APIs` by using `Stack String Obfuscation` and simple `XOR Encryption`
 
 ---
 
 ### Dynamic
 
 Before first run, capture state with `RegShot`: compare state of registry before and after
+
+Click to see below video
+
+[![video](https://i.ibb.co/b64JG0s/Screenshot-20230116-085406.png)](https://streamable.com/fdo2v9)
 
 Following PDF file following in same folder. Using flag `-pass` when running file to decrypt the source code of `LockBit` and execute it on victim:
 
